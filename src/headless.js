@@ -78,21 +78,23 @@ const enumValue = values => value => values.includes(value);
 const item = (value, checks) => isObject(value) && Object.entries(checks).every(([key, check]) => optional(value, key, check));
 const playerFields = {
   pos: isPosition, vel: isPosition, grounded: isBoolean, facing: Number.isFinite, carried: isCount, flames: isCount,
-  invuln_ticks: isCount, dash_cd_ticks: isCount, pulse_cd_ticks: isCount, charm_ticks: isCount
+  invuln_ticks: isCount, dash_cd_ticks: isCount, pulse_cd_ticks: isCount, charm_ticks: isCount, successful_lights: isCount
 };
 const scenarioFields = {
   player: value => item(value, playerFields),
   time_left_s: value => Number.isFinite(value) && value >= 0,
   random_motes: isBoolean, random_shades: isBoolean, random_drifters: isBoolean, wind_enabled: isBoolean,
   lanterns: value => Array.isArray(value) && value.every(entry => item(entry, {
-    id: isId, pos: isPosition, lit: isBoolean, deposited: isCount
+    id: isId, pos: isPosition, lit: isBoolean, deposited: isCount, ever_lit: isBoolean,
+    fuel: value => Number.isFinite(value) && value >= 0 && value <= contract.tuning.fuel_max
   }) && isId(entry.id)),
   motes: value => Array.isArray(value) && value.every(entry => isPosition(entry) || item(entry, {
     id: isId, pos: isPosition, kind: enumValue(["random", "dropped"]), ttl_ticks: isCount,
     ttl_s: value => value === null || (Number.isFinite(value) && value >= 0)
   }) && isPosition(entry.pos)),
   shades: value => Array.isArray(value) && value.every(entry => item(entry, {
-    id: isId, pos: isPosition, state_ticks_left: isCount, state: enumValue(["spawning", "wander", "chase", "recoil", "stunned"])
+    id: isId, pos: isPosition, state_ticks_left: isCount, target_lantern_id: isId,
+    state: enumValue(["spawning", "wander", "chase", "recoil", "stunned", "drain"])
   }) && isPosition(entry.pos)),
   drifters: value => Array.isArray(value) && value.every(entry => item(entry, {
     id: isId, pos: isPosition, state_ticks_left: isCount, stolen: isCount, state: enumValue(["idle", "chase", "flee", "removed"])

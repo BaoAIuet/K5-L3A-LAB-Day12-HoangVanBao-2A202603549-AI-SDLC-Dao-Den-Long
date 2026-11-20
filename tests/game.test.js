@@ -8,7 +8,7 @@ const emptyNight = (extra = {}) => ({
 });
 
 test("contract tuning, three night maps, and deterministic starting items", () => {
-  for (const [night, count, duration] of [[1, 5, 300], [2, 6, 330], [3, 7, 360]]) {
+  for (const [night, count, duration] of [[1, 5, 240], [2, 6, 270], [3, 7, 300]]) {
     const game = createGame(42, {}, {}, night);
     assert.equal(game.lanterns.length, count);
     assert.equal(game.timeLeft, duration);
@@ -52,7 +52,7 @@ test("lantern interaction banks partial amounts and picks the nearest eligible l
   assert.equal(game.lanterns.find(l => l.id === "L2").lit, true);
   assert.equal(game.lanterns.find(l => l.id === "L1").deposited, 8);
   assert.equal(game.player.carried, 0);
-  assert.equal(game.score, 200);
+  assert.equal(game.score, 150);
 });
 
 test("dash has standardized duration, cooldown, and a rising-edge trigger", () => {
@@ -78,6 +78,51 @@ test("pulse consumes three carried motes, stuns and pushes shades deterministica
   assert.ok(game.shades[0].pos[2] > 4);
   assert.equal(game.score, 5);
   assert.equal(game.events.some(e => e.name === "pulse"), true);
+});
+
+test("a shade detects within 12 m, keeps chasing until 18 m, and checks range again after a stun", () => {
+  const game = createGame(1, emptyNight({ shades: [{ pos: [0, 0, 13], state: "wander" }] }));
+  const shade = game.shades[0];
+  const stepAt = (distance, input) => {
+    game.player.pos = [0, 0, 0];
+    shade.pos = [0, 0, distance];
+    game.step(input);
+    return shade.state;
+  };
+  assert.equal(stepAt(12.01), "wander");
+  assert.equal(stepAt(12), "chase");
+  assert.equal(stepAt(17.99), "chase");
+  assert.equal(stepAt(18), "wander");
+  game.player.carried = 3;
+  assert.equal(stepAt(4, { pulse: true }), "stunned");
+  for (let i = 0; i < 119; i++) stepAt(14, { pulse: false });
+  assert.equal(shade.state, "wander");
+});
+
+test("a shade with forward vision acquires from the front and loses pursuit at 18 m", () => {
+  const check = (pos, expected) => {
+    const game = createGame(1, emptyNight({
+      player: { pos },
+      shades: [{ pos: [0, 0, 0], state: "wander" }]
+    }), { shade_view_deg: 90 });
+    const shade = game.shades[0];
+    shade.heading = [0, 1];
+    game.step();
+    assert.equal(shade.state, expected);
+    return game;
+  };
+  check([0, 0, -6], "wander");
+  check([6, 0, 0], "wander");
+  check([-6, 0, 0], "wander");
+  check([0, 0, 12.01], "wander");
+  const game = check([2, 0, 6], "chase");
+  const shade = game.shades[0];
+  game.player.pos = [shade.pos[0], 0, shade.pos[2] - 16];
+  game.step();
+  assert.equal(shade.state, "chase");
+  game.player.pos = [shade.pos[0], 0, shade.pos[2] + 18.01];
+  game.step();
+  assert.equal(shade.state, "wander");
 });
 
 test("pause advances wall tick but freezes simulation time until resumed", () => {

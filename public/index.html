@@ -13,7 +13,7 @@
     <div class="hud-left panel"><strong id="night-title"></strong><div id="flames" aria-label="Lửa còn lại"></div></div>
     <div class="timer panel"><span class="hud-label">ĐẾN BÌNH MINH</span><strong id="clock">05:00</strong></div>
     <div class="hud-right panel"><span class="hud-label">ĐÈN ĐÃ THẮP</span><strong id="lantern-count">0 / 5</strong>
-      <progress id="lantern-progress" max="1" value="0" aria-label="Tiến độ thắp đèn"></progress><span id="score">0 điểm</span></div>
+      <progress id="lantern-progress" max="1" value="0" aria-label="Tiến độ thắp đèn"></progress><span id="dawn-goal"></span><span id="score">0 điểm</span></div>
     <div id="wind-label" hidden></div>
     <div id="direction-arrow" hidden aria-hidden="true"></div>
     <div class="kit panel">
@@ -59,6 +59,7 @@
     <div class="card"><p class="eyebrow">CÀI ĐẶT</p><h1>Âm thanh & điều khiển</h1>
       <label>Âm lượng <input id="volume" type="range" min="0" max="1" step="0.05"></label>
       <label>Độ nhạy chuột <input id="sensitivity" type="range" min="0.2" max="3" step="0.1"></label>
+      <label>Bảng màu dễ phân biệt <input id="accessible-palette" type="checkbox"></label>
       <button id="close-settings">Xong</button>
     </div>
   </div>

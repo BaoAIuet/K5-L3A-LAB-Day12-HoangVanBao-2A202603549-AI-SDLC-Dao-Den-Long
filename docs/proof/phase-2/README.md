@@ -29,3 +29,21 @@ Các bản ghi full-night dùng input mặc định (không điều khiển ngư
 - Kiểm tra tạm dừng và tiếp tục qua giao diện. Với trạng thái chuẩn bị trong phiên kiểm thử, nhấn `F` tiêu hao 3 đom đóm và nhấn `E` để thắp đèn cập nhật HUD thành `1 / 5` cùng thông báo.
 - Chuỗi thắng ở cả ba đêm đi đến Bình Minh. Đã thử thắng bằng lần nạp đèn cuối, chơi lại sau khi mất hết Ngọn Lửa và mở cài đặt khi đang tạm dừng. Trạng thái trước mỗi tình huống được chuẩn bị bằng Chrome DevTools.
 - Build và 18 kiểm thử đều đạt. [Bản ghi headless Đêm 1, seed 42, 60 tick](out.jsonl).
+
+## Kiểm chứng bản nâng cấp nhân vật và cảnh quan
+
+- Chrome WebGL 2 nhận phím chạy, nhảy và lướt. Phiên thử quan sát được hạt dưới chân khi chạy, trạng thái trên không và tiếp đất. Ảnh kiểm tra menu cho thấy nón, khuôn mặt và đèn cầm tay.
+- Lấy mẫu 3 giây đầu ở 1280 × 720 trên Chrome, Intel Iris Xe/ANGLE D3D11. Đêm 1 đạt 44,7 FPS, Đêm 2 đạt 31,2 FPS, Đêm 3 đạt 38,5 FPS. Đây là số đo đầu mỗi đêm trên máy kiểm tra.
+- Build và 18 test đạt. Chạy lại lệnh headless 60 tick với seed 42 cho bản ghi khớp với tệp đã lưu.
+
+## Kiểm chứng hướng điều khiển và hiệu ứng cảnh vật
+
+- Chrome WebGL 2 xác nhận A/D và ←/→ di chuyển đúng phía theo camera ở góc 0° và 90°. Đối chiếu độ dời của Mây với trục ngang của camera.
+- Kiểm tra ảnh chụp menu và Đêm 1, gồm sao, núi, nước, tán cây và Bóng Mực. Tình huống có Bóng Mực được chuẩn bị trong phiên thử để xác nhận quầng sáng và bốn dải sương.
+- Mẫu Chrome ở 1280 × 720 trên Intel Iris Xe đạt 51,1 FPS ở Đêm 1, 44,8 ở Đêm 2 và 48,7 ở Đêm 3.
+
+## Kiểm chứng Bóng Mực phát hiện và phản hồi Tỏa Sáng
+
+- Test mô phỏng kiểm tra các mốc 12 m và 18 m, cùng việc kiểm tra lại khoảng cách khi hết choáng. Toàn bộ 19 test đạt.
+- Chrome chạy tình huống có Bóng Mực ở gần Mây. Bóng Mực chuyển sang đuổi, rồi phím F tạo hai vòng sóng, chớp sáng, tia bung và vệt đẩy lùi. Hiệu ứng va chạm được thu hồi khi kết thúc trong khi Bóng Mực vẫn choáng.
+- Bản trình duyệt bật tầm nhìn 90° theo hướng mắt Bóng Mực. Test tập trung kiểm tra phía trước, hai bên hông, phía sau, ngoài bán kính 12 m và việc ngừng đuổi ở 18 m. CLI theo quy tắc phát hiện bằng bán kính của Contract v1.1. Toàn bộ 20 test đạt.

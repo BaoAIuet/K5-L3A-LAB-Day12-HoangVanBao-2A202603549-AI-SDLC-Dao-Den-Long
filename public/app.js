@@ -1,5 +1,6 @@
 import * as THREE from "/vendor/three.module.js";
 import { createGame } from "/src/game.js";
+import { createMay } from "./character.js";
 import { createAtmosphere, dressIsland, makeGlowTexture, makeTurfTexture } from "./scenery.js";
 
 const world = document.querySelector("#world");
@@ -14,6 +15,7 @@ try {
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;
   world.appendChild(renderer.domElement);
 } catch (error) {
   world.textContent = `Không khởi tạo được WebGL: ${error.message}`;
@@ -42,19 +44,28 @@ let toastUntil = 0;
 let previousScreen = "menu";
 let accumulator = 0;
 let lastFrameAt = 0;
+let lastShadowFrame = -Infinity;
 let audioContext = null;
 let ambientNodes = [];
 let worldGroup = new THREE.Group();
 let entityObjects = { motes: new Map(), lanterns: new Map(), shades: new Map(), drifters: new Map(), charms: new Map() };
 let playerObject;
+let may;
+let footEffects = [];
+let nextFootEffect = 0;
+let trailTimer = 0;
+let wasGrounded = true;
+const priorPlayerPosition = new THREE.Vector3();
+const currentPlayerPosition = new THREE.Vector3();
 let ambientLight;
 let atmosphere;
 let glowTexture;
 let turfTexture;
 let effects = [];
+let impacts = [];
 let hitUntil = 0;
 
-let settings = { volume: 0.35, sensitivity: 1 };
+let settings = { volume: 0.35, sensitivity: 1, accessiblePalette: false };
 try {
   settings = { ...settings, ...JSON.parse(localStorage.getItem("dao-den-long-settings") || "{}") };
 } catch (error) {
@@ -62,6 +73,8 @@ try {
 }
 document.querySelector("#volume").value = settings.volume;
 document.querySelector("#sensitivity").value = settings.sensitivity;
+document.querySelector("#accessible-palette").checked = settings.accessiblePalette;
+document.documentElement.classList.toggle("accessible-palette", settings.accessiblePalette);
 
 function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -126,8 +139,17 @@ function playEvents() {
     }
     else if (event.name === "pulse") {
       tone(190, 0.25, "sawtooth");
-      emitRing(game.player.pos, "#a3dbff", game.tuning.pulse_radius, 500);
+      const now = performance.now();
+      emitRing(game.player.pos, "#a3dbff", game.tuning.pulse_radius, 370, now);
+      emitRing(game.player.pos, "#5377ff", game.tuning.pulse_radius * 0.88, 430, now + 45);
+      for (const id of event.data.stunned_ids) {
+        const shade = game.shades.find(item => item.id === id);
+        if (shade) emitShadeImpact(shade, now);
+      }
+      if (event.data.stunned_ids.length) tone(390, 0.24, "triangle");
     }
+    else if (event.name === "refuel") tone(590, 0.16);
+    else if (event.name === "lantern_out") tone(125, 0.26, "triangle");
     else if (event.name === "player_hit") {
       tone(110, 0.24, "square");
       hitUntil = performance.now() + 380;
@@ -149,7 +171,7 @@ function showIntro(which) {
 
 function beginNight() {
   startAudio();
-  game = createGame((Date.now() ^ (night * 271)) >>> 0, {}, {}, night);
+  game = createGame((Date.now() ^ (night * 271)) >>> 0, {}, { shade_view_deg: 90 }, night);
   buildWorld(night);
   cameraYaw = 0;
   handledFinish = false;
@@ -191,6 +213,8 @@ function handleFinishedGame() {
 function settingsChanged() {
   settings.volume = Number(document.querySelector("#volume").value);
   settings.sensitivity = Number(document.querySelector("#sensitivity").value);
+  settings.accessiblePalette = document.querySelector("#accessible-palette").checked;
+  document.documentElement.classList.toggle("accessible-palette", settings.accessiblePalette);
   localStorage.setItem("dao-den-long-settings", JSON.stringify(settings));
   if (audioContext) {
     for (const node of ambientNodes) node.master.gain.setTargetAtTime(settings.volume, audioContext.currentTime, 0.08);
@@ -214,6 +238,7 @@ document.querySelector("#pause-settings").addEventListener("click", () => { prev
 document.querySelector("#close-settings").addEventListener("click", () => showScreen(previousScreen));
 document.querySelector("#volume").addEventListener("input", settingsChanged);
 document.querySelector("#sensitivity").addEventListener("input", settingsChanged);
+document.querySelector("#accessible-palette").addEventListener("change", settingsChanged);
 
 addEventListener("keydown", event => {
   if (event.target instanceof HTMLInputElement || (event.target instanceof HTMLButtonElement && event.key === " ")) return;
@@ -245,8 +270,9 @@ pointerTarget.addEventListener("pointercancel", () => { dragging = false; });
 
 function readInput() {
   let x = 0, z = 0;
-  if (keys.has("a") || keys.has("arrowleft")) x -= 1;
-  if (keys.has("d") || keys.has("arrowright")) x += 1;
+  // At zero yaw the camera looks along +Z, so screen-right is -X.
+  if (keys.has("a") || keys.has("arrowleft")) x += 1;
+  if (keys.has("d") || keys.has("arrowright")) x -= 1;
   if (keys.has("w") || keys.has("arrowup")) z += 1;
   if (keys.has("s") || keys.has("arrowdown")) z -= 1;
   const input = {
@@ -276,6 +302,7 @@ function disposeTree(object) {
   object.traverse(child => {
     child.geometry?.dispose();
     if (child.isInstancedMesh) child.dispose();
+    child.userData.ownedTexture?.dispose();
     child.material?.dispose();
   });
 }
@@ -290,7 +317,7 @@ function glow(parent, color, size, y, x = 0, z = 0) {
   return sprite;
 }
 
-function emitRing(position, color, radius, duration) {
+function emitRing(position, color, radius, duration, started = performance.now()) {
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 64),
     new THREE.MeshBasicMaterial({
       color, transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending
@@ -298,21 +325,63 @@ function emitRing(position, color, radius, duration) {
   ring.position.set(position[0], position[1] + 0.065, position[2]);
   ring.rotation.x = -Math.PI / 2;
   worldGroup.add(ring);
-  effects.push({ ring, radius, duration, started: performance.now() });
+  ring.visible = false;
+  effects.push({ ring, radius, duration, started });
+}
+
+function emitShadeImpact(shade, started) {
+  const [x, , z] = shade.pos;
+  const [dx, dz] = shade.pushDirection;
+  const y = Math.max(shade.pos[1], game.floorAt(x, z, shade.pos[1]) ?? shade.pos[1]) + 0.62;
+  const group = new THREE.Group();
+  group.position.set(x, y, z);
+  group.rotation.y = Math.atan2(dx, dz);
+  worldGroup.add(group);
+  const flash = glow(group, "#b7eeff", 2.75, 0);
+  const sparks = Array.from({ length: 13 }, (_, i) => {
+    const angle = i * 2.39996;
+    return {
+      sprite: glow(group, i % 3 ? "#72ceff" : "#b98bff", 0.60, 0),
+      x: Math.cos(angle) * (0.5 + i % 4 * 0.25),
+      y: Math.sin(angle) * 0.57 + 0.23,
+      z: 1.24 + i % 5 * 0.27
+    };
+  });
+  impacts.push({ group, flash, sparks, started });
+}
+
+function updateShadeImpacts(timestamp) {
+  impacts = impacts.filter(({ group, flash, sparks, started }) => {
+    const age = clamp((timestamp - started) / 490, 0, 1);
+    if (age === 1) {
+      worldGroup.remove(group);
+      disposeTree(group);
+      return false;
+    }
+    const spread = 1 - (1 - age) ** 2;
+    flash.scale.setScalar(0.88 + spread * 2.3);
+    flash.material.opacity = (1 - age) ** 5;
+    for (const { sprite, x, y, z } of sparks) {
+      sprite.position.set(x * spread, y * spread - age * age * 0.29, z * spread);
+      sprite.material.opacity = (1 - age) ** 2 * 0.96;
+      sprite.scale.setScalar(0.41 - age * 0.31);
+    }
+    return true;
+  });
 }
 
 function addIsland(cx, cz, radius) {
   addMesh(worldGroup, new THREE.CylinderGeometry(radius, radius * 0.975, 1.2, 96),
     makeMaterial("#C9B48A", { flatShading: true }), [cx, -0.63, cz]);
   const turf = addMesh(worldGroup, new THREE.CylinderGeometry(radius, radius, 0.12, 96),
-    makeMaterial(atmosphere.turf, { map: turfTexture }), [cx, -0.06, cz]);
+    makeMaterial(atmosphere.turf, { map: turfTexture, bumpMap: turfTexture, bumpScale: 0.095 }), [cx, -0.06, cz]);
   turf.castShadow = false;
   const shore = new THREE.Mesh(new THREE.RingGeometry(radius - 0.75, radius, 128),
     new THREE.MeshBasicMaterial({ color: "#8ca8a3", transparent: true, opacity: 0.36, depthWrite: false }));
   shore.position.set(cx, 0.008, cz);
   shore.rotation.x = -Math.PI / 2;
   worldGroup.add(shore);
-  dressIsland(worldGroup, cx, cz, radius);
+  dressIsland(worldGroup, cx, cz, radius, atmosphere.time);
 }
 
 function addBridge() {
@@ -333,6 +402,7 @@ function addLaunchPad(x, y, z) {
 }
 
 function buildWorld(which) {
+  lastShadowFrame = -Infinity;
   if (worldGroup.parent) {
     scene.remove(worldGroup);
     disposeTree(worldGroup);
@@ -343,6 +413,7 @@ function buildWorld(which) {
   camera.lookAt(0, 1.3, game ? 0 : 15);
   entityObjects = { motes: new Map(), lanterns: new Map(), shades: new Map(), drifters: new Map(), charms: new Map() };
   effects = [];
+  impacts = [];
   atmosphere = createAtmosphere(scene, worldGroup, which);
   if (which === 1) {
     addIsland(0, 0, 40);
@@ -382,7 +453,16 @@ function buildWorld(which) {
   }
   for (const pad of game?.map.pads ?? []) addLaunchPad(...pad.pos);
   windLeaves = which === 3 ? createWindLeaves() : null;
-  playerObject = createPlayerMesh();
+  may = createMay(worldGroup, glow);
+  playerObject = may.root;
+  priorPlayerPosition.set(...(game?.player.pos ?? [0, 0, 0]));
+  nextFootEffect = trailTimer = 0;
+  wasGrounded = game?.player.grounded ?? true;
+  footEffects = Array.from({ length: 25 }, () => {
+    const sprite = glow(worldGroup, "#ffffff", 1, 0);
+    sprite.visible = false;
+    return { sprite, until: 0, life: 0 };
+  });
   if (!game) {
     for (const [x, z] of [[-6, -2], [5, 2], [-15, 8], [12, 11], [1, 19]]) {
       const lantern = makeLantern();
@@ -396,32 +476,59 @@ function buildWorld(which) {
       worldGroup.add(mote);
     }
     playerObject.position.set(1, 0, -4);
+    playerObject.rotation.y = Math.PI * 0.97;
+    camera.position.set(2.1, 2.25, -9.5);
+    camera.lookAt(3.9, 1.55, -4);
+    const portraitLight = new THREE.PointLight("#ffe0b4", 12, 9);
+    portraitLight.position.set(0, 2.55, -6);
+    worldGroup.add(portraitLight);
   }
 }
 
-function createPlayerMesh() {
-  const group = new THREE.Group();
-  addMesh(group, new THREE.CylinderGeometry(0.28, 0.49, 0.94, 12),
-    makeMaterial("#E8E2D0"), [0, 0.82, 0]);
-  addMesh(group, new THREE.CylinderGeometry(0.35, 0.38, 0.13, 12),
-    makeMaterial("#C8102E"), [0, 0.77, 0]);
-  const boots = [-0.18, 0.18].map(x => addMesh(group, new THREE.BoxGeometry(0.23, 0.35, 0.34),
-    makeMaterial("#352536"), [x, 0.22, 0.05]));
-  group.userData.boots = boots;
-  addMesh(group, new THREE.SphereGeometry(0.26, 16, 12),
-    makeMaterial("#E8B99A"), [0, 1.42, 0]);
-  addMesh(group, new THREE.ConeGeometry(0.64, 0.39, 18),
-    makeMaterial("#cf9562"), [0, 1.76, 0]);
-  addMesh(group, new THREE.CylinderGeometry(0.61, 0.64, 0.05, 18),
-    makeMaterial("#743c39"), [0, 1.55, 0]);
-  const lamp = addMesh(group, new THREE.SphereGeometry(0.13, 12, 10),
-    makeMaterial("#FFE58A", { emissive: "#FFE58A", emissiveIntensity: 1.5 }), [0.36, 1.12, 0.18]);
-  const lampLight = new THREE.PointLight("#ffbf73", 7, 7);
-  lampLight.position.copy(lamp.position);
-  group.add(lampLight);
-  glow(group, "#ffb861", 1.4, lamp.position.y, lamp.position.x, lamp.position.z);
-  worldGroup.add(group);
-  return group;
+function emitFootEffect(time, life, color, x, y, z, dust = false) {
+  const effect = footEffects[nextFootEffect];
+  nextFootEffect = (nextFootEffect + 1) % footEffects.length;
+  effect.until = time + life;
+  effect.life = life;
+  effect.dust = dust;
+  effect.height = y;
+  effect.sprite.position.set(x, y, z);
+  effect.sprite.material.color.set(color);
+  effect.sprite.material.blending = dust ? THREE.NormalBlending : THREE.AdditiveBlending;
+  effect.sprite.visible = true;
+}
+
+function updateFootEffects(time, delta, state, foot) {
+  const { x, y, z } = playerObject.position;
+  const yaw = playerObject.rotation.y;
+  if (foot || (state.grounded && !wasGrounded && !game.respawnTicks)) {
+    const landing = !wasGrounded && state.grounded;
+    const count = landing ? 7 : 3;
+    for (let i = 0; i < count; i++) {
+      const angle = i * 2.399 + time;
+      const distance = landing ? 0.48 : 0.22;
+      emitFootEffect(time, 0.36 + i * 0.035, "#b1a592",
+        x + Math.cos(yaw) * foot * 0.15 + Math.cos(angle) * distance, y + 0.09,
+        z - Math.sin(yaw) * foot * 0.15 + Math.sin(angle) * distance, true);
+    }
+  }
+  wasGrounded = state.grounded;
+  trailTimer -= delta;
+  if (trailTimer <= 0 && (state.dashing || (state.charmed && state.speed > 0.5))) {
+    emitFootEffect(time, 0.29, state.dashing ? "#93d2ff" : "#ffcc78",
+      x + Math.cos(yaw) * Math.sin(time * 45) * 0.41, y + 0.52 + Math.sin(time * 25) * 0.24,
+      z - Math.cos(yaw) * 0.44);
+    trailTimer = 0.026;
+  }
+  for (const effect of footEffects) {
+    const remaining = Math.max(0, (effect.until - time) / effect.life);
+    effect.sprite.visible = effect.until > time;
+    if (!effect.sprite.visible) continue;
+    const age = 1 - remaining;
+    effect.sprite.position.y = effect.height + age * (effect.dust ? 0.23 : 0.27);
+    effect.sprite.scale.setScalar(effect.dust ? 0.26 + age * 0.78 : 0.19 + age * 0.67);
+    effect.sprite.material.opacity = remaining ** 2 * (effect.dust ? 0.64 : 0.36);
+  }
 }
 
 function makeMote() {
@@ -453,34 +560,90 @@ function makeLantern() {
   const light = new THREE.PointLight("#ffaf58", 0, 15);
   light.position.y = 2.35;
   group.add(light);
-  Object.assign(group.userData, { light, body, core, halo: glow(group, "#FFB347", 4.8, 2.05) });
+  const tearShape = new THREE.Shape();
+  tearShape.moveTo(-0.09, 0.28);
+  for (const [x, y] of [[0.02, 0.10], [-0.024, 0.02], [0.08, -0.19], [-0.12, -0.02], [-0.066, 0.08]]) tearShape.lineTo(x, y);
+  tearShape.closePath();
+  const tornPaper = addMesh(body, new THREE.ShapeGeometry(tearShape),
+    new THREE.MeshBasicMaterial({ color: "#20222e", side: THREE.DoubleSide }), [0, 0, -0.37]);
+  tornPaper.castShadow = false;
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 16;
+  const gaugeTexture = new THREE.CanvasTexture(canvas);
+  const gauge = new THREE.Sprite(new THREE.SpriteMaterial({ map: gaugeTexture, depthWrite: false }));
+  gauge.userData.ownedTexture = gaugeTexture;
+  gauge.position.y = 2.96;
+  gauge.scale.set(1.35, 0.17, 1);
+  group.add(gauge);
+  Object.assign(group.userData, { light, body, core, tornPaper, gauge, halo: glow(group, "#FFB347", 4.8, 2.05) });
   return group;
 }
 
 function styleLantern(object, lantern, time) {
-  const { light, body, core, halo } = object.userData;
-  const charge = lantern.lit ? 1 : lantern.deposited / game.tuning.lantern_cost;
-  light.intensity = charge * (27 + Math.sin(time * 4 + object.position.x) * 2);
-  body.material.emissiveIntensity = 0.025 + charge * 1.25;
+  const { light, body, core, halo, tornPaper, gauge } = object.userData;
+  const fuel = lantern.fuelTicks == null ? 100 : lantern.fuelTicks / 60;
+  const weak = lantern.lit && fuel < 30;
+  const charge = lantern.lit ? 0.32 + 0.68 * fuel / 100 : lantern.deposited / game.lanternCost(lantern);
+  const flicker = weak ? 0.6 + 0.4 * Math.cos(time * Math.PI * 2) : 1;
+  light.intensity = charge * flicker * (27 + Math.sin(time * 4 + object.position.x) * 2);
+  body.material.emissiveIntensity = 0.025 + charge * flicker * 1.25;
   body.material.color.set(lantern.lit ? "#FFB347" : "#5B5F6E");
   core.visible = lantern.lit;
-  halo.material.opacity = 0.12 + charge * 0.78;
+  body.scale.y = lantern.lit ? 1 : 0.8;
+  tornPaper.visible = !lantern.lit;
+  halo.material.opacity = 0.12 + charge * flicker * 0.78;
   halo.material.color.set(lantern.lit || charge > 0 ? "#ff9d42" : "#89b6ff");
+  gauge.visible = lantern.lit;
+  gauge.material.opacity = weak ? 0.48 + flicker * 0.52 : 1;
+  const level = Math.ceil(fuel);
+  const color = weak && settings.accessiblePalette ? "#ffffff" : weak ? "#ff5a5f" : "#f2c14e";
+  if (gauge.visible && (gauge.userData.level !== level || gauge.userData.color !== color)) {
+    const ctx = gauge.material.map.image.getContext("2d");
+    ctx.fillStyle = "#14172c";
+    ctx.fillRect(0, 0, 128, 16);
+    ctx.fillStyle = color;
+    ctx.fillRect(3, 3, 122 * level / 100, 10);
+    gauge.userData.level = level;
+    gauge.userData.color = color;
+    gauge.material.map.needsUpdate = true;
+  }
 }
 
 function makeShade() {
   const group = new THREE.Group();
-  const body = addMesh(group, new THREE.IcosahedronGeometry(0.68, 1),
-    makeMaterial("#120A1A", { emissive: "#241035", emissiveIntensity: 0.35 }));
+  const body = addMesh(group, new THREE.IcosahedronGeometry(0.59, 3),
+    makeMaterial("#120A1A", { emissive: "#341850", emissiveIntensity: 0.42 }));
+  body.scale.set(0.93, 1.14, 0.82);
   const rim = addMesh(group, new THREE.TorusGeometry(0.67, 0.06, 8, 24),
     makeMaterial("#7A3CFF", { emissive: "#7A3CFF", emissiveIntensity: 0.45 }), [0, -0.22, 0]);
   rim.rotation.x = Math.PI / 2;
-  glow(group, "#a353ff", 2.9, -0.1);
-  for (const x of [-0.22, 0.22]) {
-    addMesh(group, new THREE.SphereGeometry(0.085, 8, 6),
-      new THREE.MeshBasicMaterial({ color: "#e3c5ff" }), [x, 0.06, 0.59]);
+  rim.castShadow = false;
+  const aura = glow(group, "#7A3CFF", 2.55, -0.03);
+  const wisps = Array.from({ length: 4 }, () => glow(group, "#7232bb", 0.70, 0));
+  const taper = new THREE.ConeGeometry(0.13, 0.76, 6);
+  taper.rotateX(Math.PI);
+  const tails = [];
+  for (let i = 0; i < 5; i++) {
+    const angle = i * 2.39996;
+    const tail = addMesh(group, taper, body.material, [Math.cos(angle) * 0.33, -0.33, Math.sin(angle) * 0.26]);
+    tail.castShadow = false;
+    tails.push(tail);
   }
-  group.userData.body = body;
+  const eyes = [];
+  for (const x of [-0.22, 0.22]) {
+    const eye = addMesh(group, new THREE.SphereGeometry(0.084, 10, 8),
+      new THREE.MeshBasicMaterial({ color: "#7A3CFF" }), [x, 0.07, 0.42]);
+    eye.scale.set(1.34, 0.45, 0.54);
+    eye.rotation.z = Math.sign(x) * 0.26;
+    eye.castShadow = false;
+    eyes.push(eye);
+  }
+  const alert = glow(group, "#ffb085", 1.15, 1.0);
+  alert.visible = false;
+  const streak = glow(group, "#80d5ff", 1.0, 0.03);
+  streak.visible = false;
+  Object.assign(group.userData, { body, rim, aura, wisps, tails, alert, streak, eyes });
   return group;
 }
 
@@ -545,9 +708,14 @@ function createWindLeaves() {
 
 function updateScene(timestamp, delta) {
   if (!renderer) return;
+  if (timestamp - lastShadowFrame >= 1000 / 30) {
+    renderer.shadowMap.needsUpdate = true;
+    lastShadowFrame = timestamp;
+  }
   const time = timestamp / 1000;
   atmosphere.time.value = time;
   if (!game) {
+    may.pose({ time, delta, speed: 0, grounded: true, vertical: 0, yaw: Math.PI * 0.97 });
     atmosphere.sky.position.copy(camera.position);
     renderer.render(scene, camera);
     return;
@@ -565,10 +733,56 @@ function updateScene(timestamp, delta) {
   }
   for (const object of entityObjects.lanterns.values()) styleLantern(object, object.userData.entity, time);
   for (const object of entityObjects.shades.values()) {
-    const stunned = object.userData.entity.state === "stunned";
-    object.userData.body.material.color.set(stunned ? "#3A3450" : "#120A1A");
-    object.position.y += 0.2 + Math.sin(time * 3 + object.position.x) * 0.14;
-    object.rotation.y = Math.atan2(game.player.pos[0] - object.position.x, game.player.pos[2] - object.position.z);
+    const { entity, body, rim, aura, wisps, tails, alert, streak, eyes } = object.userData;
+    const accent = settings.accessiblePalette ? "#00B3FF" : "#7A3CFF";
+    rim.material.color.set(accent);
+    rim.material.emissive.set(accent);
+    for (const eye of eyes) eye.material.color.set(accent);
+    const stunned = entity.state === "stunned";
+    const chasing = entity.state === "chase";
+    if (chasing && object.userData.lastState !== "chase") {
+      object.userData.alertAt = timestamp;
+      const [x, , z] = game.player.pos;
+      if (Math.hypot(object.position.x - x, object.position.z - z) < 16) tone(255, 0.16, "triangle");
+    }
+    object.userData.lastState = entity.state;
+    const alertAge = (timestamp - (object.userData.alertAt ?? -Infinity)) / 420;
+    alert.visible = chasing && alertAge < 1;
+    alert.material.opacity = alert.visible ? (1 - alertAge) ** 2 : 0;
+    alert.scale.setScalar(alert.visible ? 0.75 + alertAge * 0.64 : 1);
+    streak.visible = entity.pushTicks > 0;
+    streak.material.opacity = streak.visible ? 0.78 * entity.pushTicks / 15 : 0;
+    streak.scale.set(2.0, 0.69, 1);
+    if (streak.visible) {
+      const [dx, dz] = entity.pushDirection;
+      const matrix = camera.matrixWorld.elements;
+      streak.material.rotation = Math.atan2(dx * matrix[4] + dz * matrix[6], dx * matrix[0] + dz * matrix[2]);
+      streak.position.z = 0.43;
+    }
+    const progress = entity.state === "spawning" ? 1 - entity.stateTicksLeft / 30 : 1;
+    const phase = time * (stunned ? 1.7 : 5.2) + object.position.x;
+    body.material.color.set(stunned ? "#3A3450" : "#120A1A");
+    body.material.emissiveIntensity = (stunned ? 0.21 : 0.48) + 0.12 * Math.sin(phase);
+    body.scale.y = 1.14 + Math.sin(phase) * 0.10;
+    rim.rotation.set(Math.PI / 2 + Math.sin(phase) * 0.12, Math.cos(phase) * 0.13, 0);
+    rim.scale.setScalar(0.92 + Math.sin(phase) * 0.12);
+    aura.material.opacity = (stunned ? 0.40 : chasing ? 0.78 : 0.56) + Math.sin(phase) * 0.12;
+    for (let i = 0; i < wisps.length; i++) {
+      const age = (time * 0.71 + i / wisps.length) % 1;
+      const angle = phase * 0.54 + i * 2.4;
+      const wisp = wisps[i];
+      wisp.position.set(Math.cos(angle) * (0.34 + age * 0.60), 0.04 + age * 0.56, Math.sin(angle) * (0.28 + age * 0.44));
+      wisp.material.opacity = Math.sin(age * Math.PI) * 0.45;
+      wisp.scale.setScalar(0.40 + age * 0.91);
+    }
+    for (let i = 0; i < tails.length; i++) {
+      tails[i].rotation.x = 0.26 + Math.sin(phase + i * 1.6) * 0.36;
+      tails[i].rotation.z = Math.cos(phase + i * 2.4) * 0.35;
+    }
+    object.scale.setScalar(0.32 + 0.68 * progress);
+    object.position.y += 0.37 + Math.sin(phase * 0.58) * 0.13;
+    const [headingX, headingZ] = entity.heading ?? game.shadeWanderHeading(entity);
+    object.rotation.y = Math.atan2(headingX, headingZ);
   }
   for (const object of entityObjects.drifters.values()) object.rotation.y = time * 1.5;
   for (const object of entityObjects.charms.values()) {
@@ -576,15 +790,26 @@ function updateScene(timestamp, delta) {
     object.rotation.y = time * 1.2;
   }
 
-  playerObject.position.set(...game.player.pos);
-  playerObject.rotation.y = (90 - game.player.facing) * Math.PI / 180;
+  currentPlayerPosition.set(...game.player.pos);
+  playerObject.position.copy(currentPlayerPosition);
+  if (priorPlayerPosition.distanceToSquared(currentPlayerPosition) < 2) {
+    playerObject.position.lerp(priorPlayerPosition, 1 - clamp(accumulator * 60, 0, 1));
+  }
   playerObject.visible = !game.invulnTicks || Math.floor(game.simTick / 5) % 2 === 0;
-  const stride = Math.sin(game.simTick * 0.46) * Math.min(0.55, Math.hypot(game.player.vel[0], game.player.vel[2]) * 0.095);
-  playerObject.userData.boots[0].rotation.x = stride;
-  playerObject.userData.boots[1].rotation.x = -stride;
+  const state = {
+    time, delta: game.state === "paused" ? 0 : delta,
+    speed: Math.hypot(game.player.vel[0], game.player.vel[2]),
+    grounded: game.player.grounded, vertical: game.player.vel[1],
+    dashing: game.dashTicks > 0, charmed: game.charmTicks > 0,
+    yaw: (90 - game.player.facing) * Math.PI / 180
+  };
+  const foot = may.pose(state);
+  if (game.state === "playing") updateFootEffects(time, delta, state, foot);
   ambientLight.intensity = game.environmentLight;
   document.documentElement.style.setProperty("--impact", Math.max(0, (hitUntil - timestamp) / 380));
   effects = effects.filter(({ ring, radius, duration, started }) => {
+    if (timestamp < started) return true;
+    ring.visible = true;
     const progress = clamp((timestamp - started) / duration, 0, 1);
     if (progress === 1) {
       worldGroup.remove(ring);
@@ -595,11 +820,13 @@ function updateScene(timestamp, delta) {
     ring.material.opacity = (1 - progress) * 0.85;
     return true;
   });
+  updateShadeImpacts(timestamp);
 
   const yaw = cameraYaw * Math.PI / 180;
-  cameraTarget.set(game.player.pos[0], game.player.pos[1] + 1.35, game.player.pos[2]);
-  const distance = game.dashTicks ? 12.6 : 11.5;
-  cameraOffset.set(Math.sin(yaw) * distance, 4.5, -Math.cos(yaw) * distance);
+  cameraTarget.copy(playerObject.position);
+  cameraTarget.y += 1.22;
+  const distance = game.dashTicks ? 10.6 : 9.1;
+  cameraOffset.set(-Math.sin(yaw) * distance, 3.55, -Math.cos(yaw) * distance);
   camera.position.lerp(cameraOffset.add(cameraTarget), 1 - Math.exp(-delta * 11));
   camera.lookAt(cameraTarget);
   camera.updateMatrixWorld();
@@ -663,6 +890,9 @@ function addLighting() {
   key.shadow.camera.top = 80;
   key.shadow.camera.bottom = -80;
   scene.add(key);
+  const reflectedLight = new THREE.DirectionalLight("#768fb8", 0.38);
+  reflectedLight.position.set(16, 8, -24);
+  scene.add(reflectedLight);
 }
 
 addLighting();
@@ -681,21 +911,23 @@ function updateHud() {
   }
   const clock = document.querySelector("#clock");
   clock.textContent = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+  if (settings.accessiblePalette && seconds <= 30) clock.textContent = `⚠ ${clock.textContent}`;
   clock.classList.toggle("urgent", seconds <= 30);
   const lit = game.lanterns.filter(l => l.lit).length;
   document.querySelector("#lantern-count").textContent = `${lit} / ${game.lanterns.length}`;
   document.querySelector("#lantern-progress").value = lit / game.lanterns.length;
+  document.querySelector("#dawn-goal").textContent = `Bình minh cần ${game.requiredLights} đèn`;
   document.querySelector("#score").textContent = `${totalScore + game.score} điểm`;
   const bar = document.querySelector("#mote-bar");
-  if (bar.childElementCount !== game.tuning.carry_capacity) {
-    bar.replaceChildren(...Array.from({ length: game.tuning.carry_capacity }, () => {
+  if (bar.childElementCount !== game.capacity) {
+    bar.replaceChildren(...Array.from({ length: game.capacity }, () => {
       const cell = document.createElement("span");
       cell.className = "mote-cell";
       return cell;
     }));
   }
   for (let i = 0; i < bar.children.length; i++) bar.children[i].classList.toggle("full", i < game.player.carried);
-  document.querySelector("#mote-count").textContent = `${game.player.carried} / ${game.tuning.carry_capacity}`;
+  document.querySelector("#mote-count").textContent = `${game.player.carried} / ${game.capacity}`;
   const dash = document.querySelector("#dash-status");
   const dashCooldown = game.dashCooldownTicks / 60;
   const charmSeconds = game.charmTicks / 60;
@@ -708,7 +940,7 @@ function updateHud() {
   nearestLantern = undefined;
   let nearestDistance = Infinity;
   for (const lantern of game.lanterns) {
-    if (lantern.lit) continue;
+    if (lantern.lit && game.isSafeLantern(lantern)) continue;
     const [x, , z] = lantern.pos;
     const distance = Math.hypot(x - game.player.pos[0], z - game.player.pos[2]);
     if (distance < nearestDistance || (distance === nearestDistance && lantern.id.localeCompare(nearestLantern.id) < 0)) {
@@ -717,9 +949,11 @@ function updateHud() {
     }
   }
   const prompt = document.querySelector("#prompt");
-  prompt.hidden = nearestDistance > game.tuning.interact_radius;
-  if (!prompt.hidden) {
-    prompt.textContent = `E — Nạp ánh sáng (${game.player.carried}/${game.tuning.lantern_cost})`;
+  const target = game.interactionLantern();
+  prompt.hidden = !target;
+  if (target) {
+    prompt.textContent = target.lit ? `E — Châm dầu (${game.lanternFuel(target)}%)`
+      : `E — ${target.everLit ? "Thắp lại" : "Nạp ánh sáng"} (${target.deposited}/${game.lanternCost(target)})`;
   }
   const toast = document.querySelector("#toast");
   toast.hidden = performance.now() > toastUntil;
@@ -730,6 +964,7 @@ function fixedStep() {
   if (!game || handledFinish) return;
   if (screens.intro.hidden && screens.menu.hidden && screens.result.hidden && screens.settings.hidden) {
     const wasPaused = game.state === "paused";
+    priorPlayerPosition.set(...game.player.pos);
     game.step(readInput());
     playEvents();
     if (game.state === "playing") {

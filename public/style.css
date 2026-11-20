@@ -40,6 +40,7 @@ body { margin: 0; overflow: hidden; background: #0b1528; }
 .timer { left: 50%; transform: translateX(-50%); min-width: 118px; text-align: center; }
 #clock { display: block; font: 650 clamp(20px, 3vw, 34px)/1.15 "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; }
 #clock.urgent { color: #FF5A5F; animation: urgency 1s ease-in-out infinite alternate; }
+.accessible-palette #clock.urgent { color: #fff; }
 @keyframes urgency { to { opacity: .45; } }
 .hud-right { right: var(--gutter); min-width: 122px; display: grid; gap: 2px; }
 .hud-right strong { color: var(--gold); font-size: 20px; }
