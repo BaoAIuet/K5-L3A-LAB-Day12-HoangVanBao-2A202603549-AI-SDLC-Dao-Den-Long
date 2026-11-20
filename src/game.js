@@ -32,6 +32,12 @@ export class Game {
     this.tick = 0;
     this.state = "playing";
     this.score = 0;
+    this.night = 1;
+    this.map = { pads: [] };
+    this.drifters = [];
+    this.charms = [];
+    this.verticalSpeed = 0;
+    this.nextDropId = 1;
     this.events = [];
     this.invulnerableTicks = 0;
     this.pulseCooldownTicks = 0;
@@ -41,10 +47,13 @@ export class Game {
     const player = scenario.player || {};
     this.player = {
       pos: [...(player.pos || [0, 0, 0])],
+      vel: [0, 0, 0],
+      facing: 90,
       carried: player.carried ?? 0,
       flames: player.flames ?? this.tuning.flames
     };
     this.timeLeft = scenario.time_left_s ?? this.tuning.night1_duration_s;
+    this.initialTimeLeft = this.timeLeft;
 
     this.lanterns = [
       { id: "L1", pos: [0, 0, 25], deposited: 0, lit: false },
@@ -114,10 +123,19 @@ export class Game {
     this.player.pos[2] += wz * this.tuning.player_speed / 60;
     this.player.pos[0] = round3(this.player.pos[0]);
     this.player.pos[2] = round3(this.player.pos[2]);
-    this.player.pos[1] = 0;
+    this.player.vel[0] = wx * this.tuning.player_speed;
+    this.player.vel[2] = wz * this.tuning.player_speed;
+    if (wx || wz) this.player.facing = Math.atan2(wz, wx) * 180 / Math.PI;
+    if (this.input.jump && !this.previousInput.jump && this.player.pos[1] <= 0) this.verticalSpeed = 7;
+    if (this.player.pos[1] > 0 || this.verticalSpeed > 0) {
+      this.verticalSpeed -= 20 / 60;
+      this.player.pos[1] = Math.max(0, this.player.pos[1] + this.verticalSpeed / 60);
+      if (this.player.pos[1] === 0) this.verticalSpeed = 0;
+    }
+    this.player.vel[1] = this.verticalSpeed;
 
     for (let i = this.motes.length - 1; i >= 0; i--) {
-      if (this.player.pos[1] === this.motes[i].pos[1] && distanceXZ(this.player.pos, this.motes[i].pos) <= this.tuning.pickup_radius) {
+      if (distanceXZ(this.player.pos, this.motes[i].pos) <= this.tuning.pickup_radius) {
         if (this.player.carried < this.tuning.carry_capacity) {
           this.motes.splice(i, 1);
           this.player.carried++;
@@ -148,8 +166,8 @@ export class Game {
     }
 
     const pulseRise = this.input.pulse === true && this.previousInput.pulse !== true;
-    if (pulseRise && this.player.flames >= this.tuning.pulse_cost && this.pulseCooldownTicks === 0) {
-      this.player.flames -= this.tuning.pulse_cost;
+    if (pulseRise && this.player.carried >= this.tuning.pulse_cost && this.pulseCooldownTicks === 0) {
+      this.player.carried -= this.tuning.pulse_cost;
       this.pulseCooldownTicks = this.tuning.pulse_cooldown_s * 60;
       const stunned = [];
       for (const shade of this.shades) {
@@ -160,9 +178,9 @@ export class Game {
           this.score += this.tuning.score.per_stun;
           const dx = shade.pos[0] - this.player.pos[0];
           const dz = shade.pos[2] - this.player.pos[2];
-          const d = Math.hypot(dx, dz) || 1;
-          shade.pos[0] = round3(shade.pos[0] + dx / d * this.tuning.pulse_push_m);
-          shade.pos[2] = round3(shade.pos[2] + dz / d * this.tuning.pulse_push_m);
+          const d = Math.hypot(dx, dz);
+          shade.pos[0] = round3(shade.pos[0] + (d ? dx / d : 1) * this.tuning.pulse_push_m);
+          shade.pos[2] = round3(shade.pos[2] + (d ? dz / d : 0) * this.tuning.pulse_push_m);
         }
       }
       this.events.push({ type: "event", tick: this.tick, name: "pulse", data: { stunned_ids: stunned } });
@@ -177,15 +195,31 @@ export class Game {
       const dx = this.player.pos[0] - shade.pos[0];
       const dz = this.player.pos[2] - shade.pos[2];
       const d = Math.hypot(dx, dz);
-      if (d > this.tuning.safe_radius && d > 0.001) {
+      if (d > 0.001) {
         const move = Math.min(this.tuning.shade_speed / 60, d);
         shade.pos[0] = round3(shade.pos[0] + dx / d * move);
         shade.pos[2] = round3(shade.pos[2] + dz / d * move);
       }
-      if (d <= this.tuning.shade_hit_radius && this.invulnerableTicks === 0) {
+      for (const lantern of this.lanterns) {
+        if (!lantern.lit || distanceXZ(shade.pos, lantern.pos) >= this.tuning.safe_radius) continue;
+        const x = shade.pos[0] - lantern.pos[0];
+        const z = shade.pos[2] - lantern.pos[2];
+        const length = Math.hypot(x, z);
+        shade.pos[0] = lantern.pos[0] + (length ? x / length : 1) * this.tuning.safe_radius;
+        shade.pos[2] = lantern.pos[2] + (length ? z / length : 0) * this.tuning.safe_radius;
+      }
+      const protectedPlayer = this.lanterns.some(lantern => lantern.lit && distanceXZ(this.player.pos, lantern.pos) <= this.tuning.safe_radius);
+      if (!protectedPlayer && distanceXZ(this.player.pos, shade.pos) <= this.tuning.shade_hit_radius && this.invulnerableTicks === 0) {
         this.invulnerableTicks = this.tuning.invuln_s * 60;
         const dropped = Math.floor(this.player.carried * this.tuning.hit_drop_ratio);
         this.player.carried -= dropped;
+        for (let i = 0; i < dropped; i++) {
+          const angle = this.random() * 2 * Math.PI;
+          this.motes.push({ id: "drop" + this.nextDropId++, kind: "dropped", pos: [
+            round3(this.player.pos[0] + Math.cos(angle) * 1.5), 0,
+            round3(this.player.pos[2] + Math.sin(angle) * 1.5)
+          ] });
+        }
         this.player.flames = Math.max(0, this.player.flames - 1);
         this.events.push({ type: "event", tick: this.tick, name: "player_hit", data: { by: "shade", flames: this.player.flames, dropped } });
       }
@@ -216,6 +250,13 @@ export class Game {
     this.events.push({ type: "event", tick: this.tick, name: "game_over", data: { result, reason } });
   }
 
+  get environmentLight() {
+    return 0.15 + 0.55 * this.lanterns.filter(l => l.lit).length / this.lanterns.length;
+  }
+
+  get simTick() { return this.tick; }
+  get invulnTicks() { return this.invulnerableTicks; }
+
   snapshot() {
     return {
       type: "snapshot", tick: this.tick, sim_tick: this.tick,
@@ -224,6 +265,7 @@ export class Game {
       player: { pos: posRound(this.player.pos), flames: this.player.flames, carried: this.player.carried },
       lanterns: this.lanterns.map(l => ({ id: l.id, pos: posRound(l.pos), lit: l.lit, deposited: l.deposited })),
       shades: this.shades.map(s => ({ id: s.id, pos: posRound(s.pos), state: s.state })),
+      motes: this.motes.map(m => ({ id: m.id, pos: posRound(m.pos) })),
       motes_active: this.motes.length
     };
   }

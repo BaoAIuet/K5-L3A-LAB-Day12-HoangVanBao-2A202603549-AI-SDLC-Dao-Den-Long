@@ -8,13 +8,16 @@ const port = Number(process.env.PORT || 4173);
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json" };
 
 http.createServer((req, res) => {
-  const urlPath = req.url === "/" ? "/index.html" : req.url.split("?")[0];
+  const requestPath = req.url.split("?")[0];
+  const urlPath = requestPath === "/" ? "/index.html" : requestPath;
   const publicRoot = path.resolve(root, "public");
   const srcRoot = path.resolve(root, "src");
-  const base = urlPath.startsWith("/src/") ? srcRoot : publicRoot;
-  const relativePath = urlPath.startsWith("/src/")
-    ? urlPath.slice("/src/".length)
-    : urlPath.replace(/^\/+/, "");
+  const vendorRoot = path.resolve(root, "node_modules", "three", "build");
+  const base = urlPath.startsWith("/src/") ? srcRoot
+    : urlPath.startsWith("/vendor/") ? vendorRoot : publicRoot;
+  const relativePath = urlPath.startsWith("/src/") ? urlPath.slice("/src/".length)
+    : urlPath.startsWith("/vendor/") ? urlPath.slice("/vendor/".length)
+      : urlPath.replace(/^\/+/, "");
   const file = path.resolve(base, relativePath);
   if (!file.startsWith(base)) {
     res.writeHead(403).end("Forbidden");

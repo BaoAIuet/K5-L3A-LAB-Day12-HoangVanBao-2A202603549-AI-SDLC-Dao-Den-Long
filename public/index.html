@@ -7,13 +7,61 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <canvas id="game" width="960" height="540"></canvas>
-  <div id="hud">
-    <div><strong>Đảo Đèn Lồng</strong></div>
-    <div id="status">Ánh sáng: 5 · Mang: 0 · Điểm: 0 · Thời gian: 300</div>
+  <div id="world" aria-label="Thế giới game Đảo Đèn Lồng"></div>
+  <div id="vignette" aria-hidden="true"></div>
+  <section id="hud" hidden aria-label="Thông tin lượt chơi">
+    <div class="hud-left panel"><strong id="night-title"></strong><div id="flames" aria-label="Lửa còn lại"></div></div>
+    <div class="timer panel"><span class="hud-label">ĐẾN BÌNH MINH</span><strong id="clock">05:00</strong></div>
+    <div class="hud-right panel"><span class="hud-label">ĐÈN ĐÃ THẮP</span><strong id="lantern-count">0 / 5</strong>
+      <progress id="lantern-progress" max="1" value="0" aria-label="Tiến độ thắp đèn"></progress><span id="score">0 điểm</span></div>
+    <div id="wind-label" hidden></div>
+    <div id="direction-arrow" hidden aria-hidden="true"></div>
+    <div class="kit panel">
+      <div class="kit-inventory">
+        <div class="kit-title"><span class="hud-label">ĐOM ĐÓM</span><strong id="mote-count">0 / 5</strong></div>
+        <div id="mote-bar" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div id="ability-bar"><div><kbd>F</kbd><span id="pulse-status">Tỏa sáng</span></div></div>
+    <div id="prompt"></div>
+    <div id="toast" role="status" hidden></div>
+  </section>
+  <div id="menu-screen" class="screen">
+    <div class="card">
+      <p class="eyebrow">ĐÊM 1 · ĐẢO BẾN</p>
+      <h1>Đảo Đèn Lồng</h1>
+      <p class="menu-story">Cùng Mây gom đom đóm, thắp sáng những hòn đảo và đưa bình minh trở lại.</p>
+      <div class="menu-actions"><button id="begin">Bắt đầu hành trình <span aria-hidden="true">→</span></button>
+      <button id="open-settings" class="secondary">Cài đặt</button></div>
+      <div class="controls" aria-label="Điều khiển">
+        <span><kbd>WASD</kbd> Di chuyển</span><span><kbd>Space</kbd> Nhảy</span>
+        <span><kbd>E</kbd> Nạp đèn</span>
+        <span><kbd>F</kbd> Tỏa sáng</span><span><kbd>Esc</kbd> Tạm dừng</span>
+        <span>Kéo chuột để xoay góc nhìn</span>
+      </div>
+    </div>
   </div>
-  <div id="help">WASD/←→↑↓ di chuyển · Chuột trái: xoay phải · E nạp đèn · Space tỏa sáng · R chơi lại</div>
-  <div id="overlay" hidden><h1 id="result"></h1><button id="restart">Chơi lại</button></div>
+  <div id="intro-screen" class="screen" hidden>
+    <div class="card"><p class="eyebrow" id="intro-kicker"></p><h1 id="intro-title"></h1><p id="intro-story"></p><button id="play-night">Vào đêm</button></div>
+  </div>
+  <div id="pause-screen" class="screen" hidden>
+    <div class="card"><p class="eyebrow">ĐÊM TẠM DỪNG</p><h1>Thở một nhịp</h1>
+      <button id="resume">Tiếp tục</button><button id="replay" class="secondary">Chơi lại đêm</button>
+      <button id="pause-settings" class="secondary">Cài đặt</button><button id="to-menu" class="secondary">Về menu</button>
+    </div>
+  </div>
+  <div id="result-screen" class="screen" hidden>
+    <div class="card"><p class="eyebrow" id="result-kicker"></p><h1 id="result-title"></h1><p id="result-copy"></p>
+      <button id="result-action"></button><button id="result-menu" class="secondary">Về menu</button>
+    </div>
+  </div>
+  <div id="settings-screen" class="screen" hidden>
+    <div class="card"><p class="eyebrow">CÀI ĐẶT</p><h1>Âm thanh & điều khiển</h1>
+      <label>Âm lượng <input id="volume" type="range" min="0" max="1" step="0.05"></label>
+      <label>Độ nhạy chuột <input id="sensitivity" type="range" min="0.2" max="3" step="0.1"></label>
+      <button id="close-settings">Xong</button>
+    </div>
+  </div>
   <script type="module" src="/app.js"></script>
 </body>
 </html>
