@@ -16,6 +16,9 @@
       <progress id="lantern-progress" max="1" value="0" aria-label="Tiến độ thắp đèn"></progress><span id="dawn-goal"></span><span id="score">0 điểm</span></div>
     <div id="wind-label" hidden></div>
     <div id="direction-arrow" hidden aria-hidden="true"></div>
+    <div id="shade-arrow" hidden aria-hidden="true">➤</div>
+    <div id="visual-alerts" role="status" aria-live="polite"><div id="shade-caption" hidden></div>
+      <div id="dawn-caption" hidden></div><div id="fuel-caption" hidden></div></div>
     <div class="kit panel">
       <div class="kit-inventory">
         <div class="kit-title"><span class="hud-label">ĐOM ĐÓM</span><strong id="mote-count">0 / 10</strong></div>
@@ -32,13 +35,9 @@
       <h1>Đảo Đèn Lồng</h1>
       <p class="menu-story">Cùng Mây gom đom đóm, thắp sáng những hòn đảo và đưa bình minh trở lại.</p>
       <div class="menu-actions"><button id="begin">Bắt đầu hành trình <span aria-hidden="true">→</span></button>
-      <button id="open-settings" class="secondary">Cài đặt</button></div>
-      <div class="controls" aria-label="Điều khiển">
-        <span><kbd>WASD</kbd> Di chuyển</span><span><kbd>Space</kbd> Nhảy</span>
-        <span><kbd>Shift</kbd> Lướt</span><span><kbd>E</kbd> Nạp đèn</span>
-        <span><kbd>F</kbd> Tỏa sáng</span><span><kbd>Esc</kbd> Tạm dừng</span>
-        <span>Kéo chuột để xoay góc nhìn</span>
-      </div>
+      <button id="open-settings" class="secondary">Cài đặt</button>
+      <button id="open-leaderboard" class="secondary">Bảng xếp hạng</button></div>
+      <div class="controls" id="menu-controls" aria-label="Điều khiển"></div>
     </div>
   </div>
   <div id="intro-screen" class="screen" hidden>
@@ -53,6 +52,11 @@
   <div id="result-screen" class="screen" hidden>
     <div class="card"><p class="eyebrow" id="result-kicker"></p><h1 id="result-title"></h1><p id="result-copy"></p>
       <button id="result-action"></button><button id="result-menu" class="secondary">Về menu</button>
+      <form id="score-form" hidden>
+        <label for="score-name">Tên lưu điểm</label>
+        <input id="score-name" required minlength="3" maxlength="12" pattern="[A-Za-z0-9_]{3,12}" autocomplete="off" />
+        <button type="submit">Lưu điểm</button><p id="score-message" role="status"></p>
+      </form>
     </div>
   </div>
   <div id="settings-screen" class="screen" hidden>
@@ -60,8 +64,17 @@
       <label>Âm lượng <input id="volume" type="range" min="0" max="1" step="0.05"></label>
       <label>Độ nhạy chuột <input id="sensitivity" type="range" min="0.2" max="3" step="0.1"></label>
       <label>Bảng màu dễ phân biệt <input id="accessible-palette" type="checkbox"></label>
+      <label>Giảm chuyển động <input id="reduce-motion" type="checkbox"></label>
+      <label>Chữ lớn (×1,25) <input id="large-text" type="checkbox"></label>
+      <details><summary>Đổi phím điều khiển</summary><div id="key-bindings"></div>
+        <p id="key-message" role="status"></p><button id="reset-keys" class="secondary">Khôi phục mặc định</button>
+      </details>
       <button id="close-settings">Xong</button>
     </div>
+  </div>
+  <div id="leaderboard-screen" class="screen" hidden>
+    <div class="card"><h1>Bảng xếp hạng</h1><ol id="score-list"></ol><p id="leaderboard-message" role="status"></p>
+      <button id="close-leaderboard">Về menu</button></div>
   </div>
   <script type="module" src="/app.js"></script>
 </body>

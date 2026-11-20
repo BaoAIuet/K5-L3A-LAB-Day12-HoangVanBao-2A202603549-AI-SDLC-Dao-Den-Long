@@ -10,3 +10,5 @@
 - Ticket-02 specifies input order, three standard maps, HUD placement, and palette. Keep browser effects out of gameplay and JSONL.
 - Run the executable headless scenarios before changing a phase tag. Record headless runtime and browser FPS at 1280 × 720 with the test environment.
 - Keep fuel in integer 1/60 units. Evaluate dawn after gameplay updates and check zero flames first.
+- Run the benchmark at 1280 × 720 with 200 wandering shades and 100 motes, and record actual machine results without adjusting samples. Keep its fixed scene independent of the ordinary player's settings and creative extras.
+- Verify leaderboard persistence through CLI export and a fresh server process. Store score data outside tracked files.

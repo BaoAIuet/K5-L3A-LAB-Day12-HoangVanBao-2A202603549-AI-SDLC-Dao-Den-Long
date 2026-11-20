@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const cli = path.join(root, "src", "headless.js");
 
-test("headless v1.1 emits required snapshots for each requested night", () => {
+test("headless emits required snapshots for each requested night", () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), "lantern-contract-"));
   try {
     for (const [night, expectedLanterns] of [[1, 5], [2, 6], [3, 7]]) {
@@ -20,6 +20,8 @@ test("headless v1.1 emits required snapshots for each requested night", () => {
       const snapshot = records.find(record => record.type === "snapshot");
       assert.equal(snapshot.night, night);
       assert.equal(snapshot.lanterns.length, expectedLanterns);
+      assert.ok(snapshot.lanterns.every(lamp => lamp.fuel === 0 && !lamp.ever_lit && lamp.relit_count === 0));
+      assert.equal(snapshot.player.capacity, 10);
       assert.ok(Array.isArray(snapshot.motes));
       assert.ok(Array.isArray(snapshot.drifters));
       assert.ok(Array.isArray(snapshot.charms));

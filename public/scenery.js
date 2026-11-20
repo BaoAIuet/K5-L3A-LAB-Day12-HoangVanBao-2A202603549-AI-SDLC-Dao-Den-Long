@@ -73,7 +73,7 @@ export function createAtmosphere(scene, parent, night) {
     `
   }));
   sky.frustumCulled = false;
-  sky.renderOrder = -10;
+  sky.renderOrder = 10;
   parent.add(sky);
 
   const cliffGeometry = mountainGeometry();
@@ -191,8 +191,8 @@ function grassTuft() {
   return geometry;
 }
 
-export function dressIsland(parent, cx, cz, radius, time) {
-  const count = 730;
+export function dressIsland(parent, cx, cz, radius, time, landscapeExtras = true) {
+  const count = landscapeExtras ? 730 : 216;
   const grassSurface = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
   grassSurface.onBeforeCompile = shader => {
     shader.uniforms.windTime = time;
@@ -230,8 +230,10 @@ export function dressIsland(parent, cx, cz, radius, time) {
   grass.receiveShadow = true;
   rocks.receiveShadow = true;
   parent.add(grass, rocks);
-  addCoastalTrees(parent, cx, cz, radius, time);
-  addVillage(parent, cx, cz, radius);
+  if (landscapeExtras) {
+    addCoastalTrees(parent, cx, cz, radius, time);
+    addVillage(parent, cx, cz, radius);
+  }
 }
 
 function addVillage(parent, cx, cz, radius) {

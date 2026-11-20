@@ -377,7 +377,7 @@ export class Game {
   updateFuel() {
     for (const lantern of this.lanterns) {
       if (!lantern.lit) continue;
-      const draining = this.shades.filter(shade => shade.state === "drain"
+      const draining = this.isSafeLantern(lantern) ? [] : this.shades.filter(shade => shade.state === "drain"
         && shade.targetLanternId === lantern.id && distanceXZ(shade.pos, lantern.pos) <= 2);
       lantern.fuelTicks = Math.max(0, lantern.fuelTicks - this.tuning.fuel_decay_per_s
         - draining.length * this.tuning.drain_per_s);
@@ -552,8 +552,19 @@ export class Game {
   }
 
   nearestLantern(position, eligible) {
-    return this.lanterns.filter(eligible)
-      .sort((a, b) => distanceXZ(position, a.pos) - distanceXZ(position, b.pos) || compareIds(a, b))[0];
+    let nearest;
+    let best = Infinity;
+    for (const lantern of this.lanterns) {
+      if (!eligible(lantern)) continue;
+      const dx = position[0] - lantern.pos[0];
+      const dz = position[2] - lantern.pos[2];
+      const squared = dx * dx + dz * dz;
+      if (squared < best || (squared === best && compareIds(lantern, nearest) < 0)) {
+        nearest = lantern;
+        best = squared;
+      }
+    }
+    return nearest;
   }
 
   lanternCost(lantern) {
@@ -668,7 +679,10 @@ export class Game {
     return [Math.cos(angle), Math.sin(angle)];
   }
 
-  updateShades() {
+  updateShades({ wanderOnly = false } = {}) {
+    const weakLamps = this.lanterns.filter(lamp => lamp.lit && !this.isSafeLantern(lamp));
+    const unlit = lamp => !lamp.lit;
+    const weak = lamp => weakLamps.includes(lamp);
     for (const shade of this.shades) {
       if (shade.hitCooldownTicks > 0) shade.hitCooldownTicks--;
       if (shade.stateTicksLeft > 0) shade.stateTicksLeft--;
@@ -704,12 +718,13 @@ export class Game {
         shade.targetLanternId = undefined;
       }
       if (shade.state !== "recoil") {
-        if (shade.state === "wander" && this.shadeCanDetect(shade, distance)) shade.state = "chase";
+        if (!wanderOnly && shade.state === "wander" && this.shadeCanDetect(shade, distance)) shade.state = "chase";
         else if (distance >= 18) shade.state = "wander";
       }
       let speed = this.night === 3 ? 4.5 : this.tuning.shade_speed;
       let dx = this.player.pos[0] - shade.pos[0];
       let dz = this.player.pos[2] - shade.pos[2];
+      let drainingTarget;
       if (shade.state === "recoil") {
         dx = shade.recoilDirection[0];
         dz = shade.recoilDirection[1];
@@ -717,21 +732,21 @@ export class Game {
         shade.recoilTicks--;
         if (shade.recoilTicks <= 0) shade.state = "wander";
       } else if (shade.state === "wander") {
-        const target = this.nearestLantern(shade.pos, lamp => lamp.lit && !this.isSafeLantern(lamp))
-          ?? this.nearestLantern(shade.pos, lamp => !lamp.lit);
-        if (target?.lit && distanceXZ(shade.pos, target.pos) <= 2) {
-          shade.state = "drain";
-          shade.targetLanternId = target.id;
-          shade.drainTicks = 0;
-          continue;
-        }
+        const target = (weakLamps.length ? this.nearestLantern(shade.pos, weak) : undefined)
+          ?? this.nearestLantern(shade.pos, unlit);
+        if (target?.lit) drainingTarget = target;
         [dx, dz] = target ? [target.pos[0] - shade.pos[0], target.pos[2] - shade.pos[2]] : this.shadeWanderHeading(shade);
-        speed = 1;
+        speed = drainingTarget && distanceXZ(shade.pos, drainingTarget.pos) <= 2 ? 0 : 1;
       }
       const magnitude = Math.hypot(dx, dz) || 1;
       if (dx || dz) shade.heading = [dx / magnitude, dz / magnitude];
       shade.pos[0] = round3(shade.pos[0] + dx / magnitude * speed / TICK_RATE);
       shade.pos[2] = round3(shade.pos[2] + dz / magnitude * speed / TICK_RATE);
+      if (drainingTarget && distanceXZ(shade.pos, drainingTarget.pos) <= 2) {
+        shade.state = "drain";
+        shade.targetLanternId = drainingTarget.id;
+        shade.drainTicks = 0;
+      }
       for (const lantern of this.lanterns) {
         if (!this.isSafeLantern(lantern)) continue;
         const safeDx = shade.pos[0] - lantern.pos[0];

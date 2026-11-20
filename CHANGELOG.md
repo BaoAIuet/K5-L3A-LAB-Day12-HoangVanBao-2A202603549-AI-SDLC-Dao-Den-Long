@@ -1,5 +1,11 @@
 # Changelog
 
+## Phase 4 — v1.0.0, Contract v1.3
+
+- Thêm benchmark WebGL, soak test 10 đêm, bảng xếp hạng trên đĩa và lệnh xuất JSON.
+- Thêm đổi phím, phát hiện trùng, cỡ chữ lớn, chế độ giảm chuyển động và cảnh báo trực quan.
+- Bổ sung hướng dẫn cài, Dockerfile, gói chạy độc lập với npm install, kiểm chứng và video demo.
+
 ## Phase 3 — Contract v1.2
 
 - Breaking: đèn tiêu hao dầu, có thể tắt và cần 5 đom đóm để thắp lại. Tương tác chọn cả đèn đang sáng nếu có thể châm dầu.
