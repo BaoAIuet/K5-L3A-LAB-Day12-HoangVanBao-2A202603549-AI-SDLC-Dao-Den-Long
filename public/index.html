@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Đảo Đèn Lồng</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <canvas id="game" width="960" height="540"></canvas>
+  <div id="hud">
+    <div><strong>Đảo Đèn Lồng</strong></div>
+    <div id="status">Ánh sáng: 5 · Mang: 0 · Điểm: 0 · Thời gian: 300</div>
+  </div>
+  <div id="help">WASD/←→↑↓ di chuyển · Chuột trái: xoay phải · E nạp đèn · Space tỏa sáng · R chơi lại</div>
+  <div id="overlay" hidden><h1 id="result"></h1><button id="restart">Chơi lại</button></div>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
