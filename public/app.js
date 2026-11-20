@@ -54,6 +54,13 @@ let ambientNodes = [];
 let worldGroup = new THREE.Group();
 let entityObjects = { motes: new Map(), lanterns: new Map(), shades: new Map(), drifters: new Map(), charms: new Map() };
 let playerObject;
+let towerBell;
+let lobby;
+const systemReduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const compactLobby = matchMedia("(max-width: 760px)");
+const rotationControl = document.querySelector("#lobby-rotation");
+const lobbyFacing = Math.PI * 0.97;
+let rotationDrag;
 let may;
 let footEffects = [];
 let nextFootEffect = 0;
@@ -382,6 +389,34 @@ document.querySelector("#open-leaderboard").addEventListener("click", async () =
 });
 document.querySelector("#close-leaderboard").addEventListener("click", returnToMenu);
 
+function rotateLobby(degrees) {
+  if (!lobby) return;
+  lobby.angle = ((lobby.angle + degrees) % 360 + 360) % 360;
+  rotationControl.setAttribute("aria-valuenow", Math.round(lobby.angle) % 360);
+}
+
+rotationControl.addEventListener("pointerdown", event => {
+  if (!lobby || event.button !== 0 || rotationDrag) return;
+  rotationDrag = { id: event.pointerId, x: event.clientX };
+  rotationControl.setPointerCapture(event.pointerId);
+});
+rotationControl.addEventListener("pointermove", event => {
+  if (rotationDrag?.id !== event.pointerId) return;
+  rotateLobby((event.clientX - rotationDrag.x) * 0.62);
+  rotationDrag.x = event.clientX;
+});
+rotationControl.addEventListener("lostpointercapture", () => { rotationDrag = undefined; });
+rotationControl.addEventListener("keydown", event => {
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    event.preventDefault();
+    event.stopPropagation();
+    rotateLobby(event.key === "ArrowLeft" ? -15 : 15);
+  } else if (event.key === "Home") {
+    event.preventDefault();
+    if (lobby) rotateLobby(-lobby.angle);
+  }
+});
+
 addEventListener("keydown", event => {
   const key = event.key.toLowerCase();
   if (captureAction && screens.settings.hidden === false) {
@@ -549,11 +584,68 @@ function addIsland(cx, cz, radius) {
 }
 
 function addBridge() {
-  for (let i = 0; i < 30; i++) {
-    const x = 26.3 + i * 0.6;
-    addMesh(worldGroup, new THREE.BoxGeometry(0.58, 0.18, 4),
-      makeMaterial(i % 3 === 0 ? "#704D31" : "#6B4A2F"), [x, -0.09, 0]);
+  const bamboo = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.12, 0.12, 4, 9),
+    makeMaterial("#6B4A2F"), 60);
+  const knot = new THREE.InstancedMesh(new THREE.TorusGeometry(0.123, 0.017, 5, 10),
+    makeMaterial("#a17f56"), 120);
+  const piece = new THREE.Object3D();
+  const shades = ["#6B4A2F", "#72533a", "#634532"].map(color => new THREE.Color(color));
+  bamboo.material.color.set("#ffffff");
+  piece.rotation.x = Math.PI / 2;
+  for (let i = 0; i < bamboo.count; i++) {
+    const x = 26.15 + i * 0.30;
+    piece.position.set(x, -0.12, 0);
+    piece.updateMatrix();
+    bamboo.setMatrixAt(i, piece.matrix);
+    bamboo.setColorAt(i, shades[i % shades.length]);
+    piece.rotation.x = 0;
+    for (const [index, z] of [-1.55, 1.55].entries()) {
+      piece.position.z = z;
+      piece.updateMatrix();
+      knot.setMatrixAt(i * 2 + index, piece.matrix);
+    }
+    piece.rotation.x = Math.PI / 2;
   }
+  bamboo.receiveShadow = true;
+  worldGroup.add(bamboo, knot);
+  for (const z of [-1.13, 1.13]) {
+    addMesh(worldGroup, new THREE.BoxGeometry(18, 0.24, 0.21), makeMaterial("#573f31"), [35, -0.31, z]);
+  }
+  for (const x of [27, 32, 38, 43]) {
+    for (const z of [-1.13, 1.13]) {
+      addMesh(worldGroup, new THREE.CylinderGeometry(0.12, 0.19, 1.15, 8),
+        makeMaterial("#5c4231"), [x, -0.74, z]);
+    }
+  }
+}
+
+function addBellTower() {
+  const stone = makeMaterial("#635f67", { map: turfTexture, bumpMap: turfTexture, bumpScale: 0.07 });
+  const wood = makeMaterial("#71544a");
+  for (const [y, height, radius] of [[6.16, 0.32, 2], [6.45, 0.27, 1.83], [7.36, 1.55, 1.53], [8.26, 0.24, 1.65]]) {
+    addMesh(worldGroup, new THREE.CylinderGeometry(radius, radius, height, 16), stone.clone(), [0, y, 0]);
+  }
+  for (const x of [-0.97, 0.97]) {
+    for (const z of [-0.97, 0.97]) {
+      addMesh(worldGroup, new THREE.CylinderGeometry(0.13, 0.19, 3.44, 8), wood.clone(), [x, 10, z]);
+    }
+  }
+  stone.dispose();
+  wood.dispose();
+  addMesh(worldGroup, new THREE.CylinderGeometry(1.67, 1.67, 0.24, 8), makeMaterial("#473339"), [0, 11.74, 0]);
+  for (const [y, bottom, top, height] of [[12.16, 2, 1.45, 0.68], [12.78, 1.57, 0.85, 0.65], [13.38, 0.98, 0.06, 0.88]]) {
+    addMesh(worldGroup, new THREE.CylinderGeometry(top, bottom, height, 8),
+      makeMaterial("#37415d", { metalness: 0.28 }), [0, y, 0]).rotation.y = Math.PI / 8;
+  }
+  addMesh(worldGroup, new THREE.SphereGeometry(0.13, 12, 8), makeMaterial("#c59c61", { metalness: 0.65 }), [0, 13.87, 0]);
+  towerBell = new THREE.Group();
+  towerBell.position.y = 11.57;
+  worldGroup.add(towerBell);
+  const profile = [[0.08, -0.12], [0.36, -0.18], [0.58, -0.48], [0.61, -0.83], [0.79, -1.08], [0.78, -1.15], [0.64, -1.13]];
+  addMesh(towerBell, new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 40),
+    makeMaterial("#c59c61", { metalness: 0.62, side: THREE.DoubleSide }));
+  addMesh(towerBell, new THREE.SphereGeometry(0.14, 12, 8), makeMaterial("#66534b"), [0, -1.19, 0]);
+  glow(worldGroup, "#ffb977", 2.2, 9.32);
 }
 
 function addLaunchPad(x, y, z) {
@@ -567,6 +659,8 @@ function addLaunchPad(x, y, z) {
 
 function buildWorld(which) {
   lastShadowFrame = -Infinity;
+  towerBell = undefined;
+  lobby = undefined;
   if (worldGroup.parent) {
     scene.remove(worldGroup);
     disposeTree(worldGroup);
@@ -596,20 +690,29 @@ function buildWorld(which) {
       makeMaterial("#668677", { side: THREE.DoubleSide }), [0, 6, 0]);
     upper.rotation.x = -Math.PI / 2;
     upper.castShadow = false;
+    const paving = new THREE.InstancedMesh(new THREE.BoxGeometry(1.12, 0.035, 0.84),
+      makeMaterial("#ffffff"), 63);
+    const tile = new THREE.Object3D();
+    const tileColors = ["#50656d", "#647779", "#6e7c79"].map(color => new THREE.Color(color));
+    for (let i = 0; i < paving.count; i++) {
+      const angle = i / paving.count * Math.PI + 0.025;
+      tile.position.set(Math.cos(angle) * 21.2, 3.009, Math.sin(angle) * 21.2);
+      tile.rotation.y = -angle + Math.PI / 2;
+      tile.updateMatrix();
+      paving.setMatrixAt(i, tile.matrix);
+      paving.setColorAt(i, tileColors[i % tileColors.length]);
+    }
+    paving.receiveShadow = true;
+    worldGroup.add(paving);
     for (const [angle, radius, height] of [[20, 22, 3], [70, 22, 3], [110, 22, 3], [160, 22, 3], [20, 7.3, 6], [160, 7.3, 6]]) {
       const radians = THREE.MathUtils.degToRad(angle);
       const post = addMesh(worldGroup, new THREE.CylinderGeometry(0.37, 0.63, height, 6),
         makeMaterial("#5c6774"), [Math.cos(radians) * radius, height / 2, Math.sin(radians) * radius]);
       post.rotation.y = radians;
     }
-    addMesh(worldGroup, new THREE.CylinderGeometry(1.84, 2, 6.5, 16),
-      makeMaterial("#71544a"), [0, 9.25, 0]);
-    addMesh(worldGroup, new THREE.ConeGeometry(2, 1.5, 16),
-      makeMaterial("#37415d", { metalness: 0.28 }), [0, 13.25, 0]);
-    addMesh(worldGroup, new THREE.CylinderGeometry(0.42, 0.95, 1.25, 16),
-      makeMaterial("#c59c61", { metalness: 0.65 }), [0, 11.7, 1.7]);
+    addBellTower();
     for (const angle of [30, 150]) {
-      const ramp = addMesh(worldGroup, new THREE.BoxGeometry(6.5, 0.22, 3),
+      const ramp = addMesh(worldGroup, new THREE.BoxGeometry(Math.hypot(6, 3), 0.22, 3),
         makeMaterial("#C9B48A"), [Math.cos(angle * Math.PI / 180) * 27, 1.5, Math.sin(angle * Math.PI / 180) * 27]);
       ramp.rotation.y = -angle * Math.PI / 180;
       ramp.rotation.z = -Math.atan(0.5);
@@ -628,24 +731,63 @@ function buildWorld(which) {
     return { sprite, until: 0, life: 0 };
   });
   if (!game) {
+    lobby = { time: 0, angle: 0, lanterns: [], motes: [], orbiters: [] };
+    rotationControl.setAttribute("aria-valuenow", "0");
     for (const [x, z] of [[-6, -2], [5, 2], [-15, 8], [12, 11], [1, 19]]) {
       const lantern = makeLantern();
       lantern.position.set(x, 0, z);
       styleLantern(lantern, { lit: true }, 0);
       worldGroup.add(lantern);
+      lobby.lanterns.push(lantern);
     }
     for (let i = 0; i < 22; i++) {
       const mote = makeMote();
       mote.position.set(Math.sin(i * 2.4) * (3 + i * 0.64), 0.3 + i % 4 * 0.34, -4 + i * 1.15);
       worldGroup.add(mote);
+      lobby.motes.push({ mote, origin: mote.position.clone(), phase: i * 2.39996 });
     }
     playerObject.position.set(1, 0, -4);
-    playerObject.rotation.y = Math.PI * 0.97;
+    playerObject.rotation.y = lobbyFacing;
     camera.position.set(2.1, 2.25, -9.5);
     camera.lookAt(3.9, 1.55, -4);
     const portraitLight = new THREE.PointLight("#ffe0b4", 12, 9);
     portraitLight.position.set(0, 2.55, -6);
     worldGroup.add(portraitLight);
+    for (let i = 0; i < 8; i++) {
+      lobby.orbiters.push(glow(worldGroup, i % 3 ? "#FFD27A" : "#A9E9FF", 0.25, 0));
+    }
+  }
+}
+
+function updateLobby(delta) {
+  const motion = settings.reduceMotion || systemReduceMotion.matches ? 0 : delta;
+  lobby.time += motion;
+  const t = lobby.time;
+  const yaw = lobbyFacing + THREE.MathUtils.degToRad(lobby.angle);
+  if (!motion) may.root.rotation.y = yaw;
+  may.pose({ time: t, delta: motion, speed: 0, grounded: true, vertical: 0, yaw });
+  atmosphere.time.value = t;
+  camera.position.set(2.1 + Math.sin(t * 0.28) * 0.25, 2.25 + Math.sin(t * 0.36) * 0.08,
+    -9.5 + (1 - Math.cos(t * 0.24)) * 0.18);
+  if (compactLobby.matches) {
+    camera.position.x -= 0.9;
+    camera.lookAt(1, 2.60, -4);
+  } else camera.lookAt(3.9, 1.55, -4);
+  atmosphere.sky.position.copy(camera.position);
+  for (const lantern of lobby.lanterns) styleLantern(lantern, { lit: true }, t);
+  for (const { mote, origin, phase } of lobby.motes) {
+    mote.position.set(origin.x + Math.sin(t * 0.68 + phase) * 0.48,
+      origin.y + Math.sin(t * 1.73 + phase) * 0.20, origin.z + Math.cos(t * 0.57 + phase) * 0.34);
+    mote.rotation.set(t * 0.62 + phase, t * 1.21 + phase, 0);
+    mote.scale.setScalar(0.77 + 0.18 * Math.sin(t * 2.25 + phase));
+  }
+  for (const [i, sprite] of lobby.orbiters.entries()) {
+    const angle = t * (0.40 + i * 0.052) + i * 2.39996;
+    const radius = 0.76 + i * 0.17;
+    sprite.position.set(1 + Math.cos(angle) * radius, 0.28 + i % 5 * 0.30 + Math.sin(t * 1.3 + i) * 0.18,
+      -4 + Math.sin(angle) * radius);
+    sprite.material.opacity = 0.24 + 0.54 * (0.5 + 0.5 * Math.sin(t * 2.4 + i)) ** 2;
+    sprite.scale.setScalar(0.22 + i % 3 * 0.045);
   }
 }
 
@@ -877,10 +1019,15 @@ function updateScene(timestamp, delta) {
     lastShadowFrame = timestamp;
   }
   const time = timestamp / 1000;
+  if (towerBell) {
+    const swing = game.windActive ? 0.13 : 0.035;
+    const t = game.simTick / 60;
+    towerBell.rotation.x = Math.sin(t * 2.2) * swing;
+    towerBell.rotation.z = Math.cos(t * 1.7) * swing * 0.62;
+  }
   atmosphere.time.value = time;
   if (!game) {
-    may.pose({ time, delta, speed: 0, grounded: true, vertical: 0, yaw: Math.PI * 0.97 });
-    atmosphere.sky.position.copy(camera.position);
+    updateLobby(delta);
     renderer.render(scene, camera);
     return;
   }

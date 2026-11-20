@@ -43,6 +43,12 @@ export function createMay(parent, glow) {
   ellipsoid(body, sphere, trousers, [0, 0.79, 0], [0.25, 0.18, 0.16]);
   mesh(body, new THREE.CylinderGeometry(0.234, 0.249, 0.09, 20), red, 0, 0.87, 0).scale.z = 0.72;
   ellipsoid(body, sphere, leather, [0.14, 0.83, 0.13], [0.12, 0.09, 0.052]);
+  ellipsoid(body, sphere, brass, [0.14, 0.85, 0.178], [0.044, 0.036, 0.014]);
+  const clasps = [-1, 1].map(side => {
+    const clasp = mesh(body, new THREE.TorusGeometry(0.039, 0.008, 6, 14), brass, side * 0.153, 1.26, 0.145);
+    clasp.rotation.y = side * 0.36;
+    return clasp;
+  });
   ellipsoid(head, sphere, skin, [0, 0, 0.02], [0.236, 0.247, 0.21]);
   ellipsoid(head, sphere, hair, [0, 0.09, -0.046], [0.244, 0.196, 0.188]);
   ellipsoid(head, sphere, skin, [0, -0.035, 0.224], [0.042, 0.036, 0.035]);
@@ -84,6 +90,11 @@ export function createMay(parent, glow) {
   const rim = mesh(hat, new THREE.TorusGeometry(0.676, 0.022, 8, 56), brass, 0, 0.025);
   rim.rotation.x = Math.PI / 2;
   ellipsoid(hat, sphere, red, [0, 0.344, 0], [0.09, 0.028, 0.09]);
+  const chinCord = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.23, 0.13, 0.019), new THREE.Vector3(-0.18, -0.153, 0.155),
+    new THREE.Vector3(0, -0.206, 0.187), new THREE.Vector3(0.18, -0.153, 0.155), new THREE.Vector3(0.23, 0.13, 0.019)
+  ]);
+  mesh(head, new THREE.TubeGeometry(chinCord, 20, 0.011, 5, false), leather);
 
   const cape = mesh(body, new THREE.PlaneGeometry(1, 1, 16, 14), indigo);
   cape.frustumCulled = false;
@@ -158,6 +169,8 @@ export function createMay(parent, glow) {
       body.position.y = bob;
       body.rotation.x = (dashing ? 0.29 : movement * 0.12) + (!grounded ? -vertical * 0.013 : 0);
       body.rotation.z = Math.cos(gait) * movement * 0.044;
+      clasps[0].rotation.z = -Math.sin(tempo * 4) * 0.08;
+      clasps[1].rotation.z = Math.sin(tempo * 4) * 0.08;
       head.rotation.z = -body.rotation.z * 0.8;
       head.rotation.x = -body.rotation.x * 0.46 + Math.sin(tempo * 1.9) * 0.026;
       hat.rotation.z = Math.sin(gait + 0.55) * movement * 0.026;

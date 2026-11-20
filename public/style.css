@@ -166,6 +166,42 @@ kbd { color: #f7ebd7; border: 1px solid #b0c3d747; border-radius: 4px; backgroun
 #settings-screen .card, #leaderboard-screen .card { max-height: calc(100vh - 2 * var(--gutter)); overflow: auto; }
 :root { --ui-size: 18px; }
 :root.large-text { --ui-size: 22.5px; }
+#lobby-rotation {
+  position: absolute;
+  inset: 34% 3% 8% 66%;
+  display: flex;
+  justify-content: center;
+  align-items: end;
+  padding: 8px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  border-radius: 12px;
+}
+#lobby-rotation:active { cursor: grabbing; }
+#lobby-rotation:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+#lobby-rotation span {
+  padding: 0.35em 0.65em;
+  border-radius: 8px;
+  background: rgb(9 18 38 / 88%);
+  color: #f5e9d4;
+  font-size: var(--ui-size);
+  text-align: center;
+}
+@media (max-width: 760px) {
+  #menu-screen { display: flex; flex-direction: column; align-items: start; gap: 12px; }
+  #menu-screen h1 { font-size: clamp(40px, 9vw, 68px); max-width: none; }
+  #lobby-rotation { position: relative; inset: auto; align-self: stretch; flex: 1 0 132px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  :root:not(.reduce-motion) #menu-screen .card {
+    animation: lobby-enter 500ms ease-out both;
+  }
+}
+@keyframes lobby-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 @media (min-width: 1000px) {
   body, button, kbd, .controls, .card .eyebrow, .menu-story, .hud-label, .hud-left strong,
   #score, #mote-count, #ability-bar, #prompt, #wind-label, #toast, #visual-alerts, #shade-arrow {
