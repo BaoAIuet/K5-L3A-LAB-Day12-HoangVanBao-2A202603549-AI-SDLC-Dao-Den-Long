@@ -34,4 +34,19 @@ Trình duyệt render thế giới bằng Three.js tải cục bộ từ depende
 
 ## Kiểm chứng
 
+### Tiêu chí chấp nhận cho các tính năng mới
+
+| Tính năng | Kết quả phải quan sát được | Kiểm chứng |
+|---|---|---|
+| Gió Lạc | Đêm 2–3 sinh theo lịch. Khi đủ điều kiện thì đuổi và chỉ cướp một lần. Tỏa sáng bắt nó bỏ chạy hoặc trả lại đom đóm đã cướp. Không trừ Ngọn Lửa. | `tests/game.test.js`, scenario CLI trong `tests/headless.test.js` |
+| Bùa Gió | Nhặt ở tọa độ chuẩn, tăng tốc lên 7,2 m/s trong 600 tick, lướt vẫn 12 tick nhưng không cần hồi chiêu. Bùa hồi sau 2.700 tick. | Test mô phỏng và scenario CLI |
+| Chuỗi ba đêm | Từ menu qua lời Ông Đăng tới màn chơi. Thắng thì sang đêm sau, thắng Đêm 3 hiện Bình Minh và tổng điểm. Thua thì chơi lại đúng đêm đó. | Trình duyệt, dùng trạng thái cuối đêm chuẩn bị để kiểm tra từng nhánh |
+| Tạm dừng | Esc/P đóng băng sim tick, đồng hồ và bộ đếm. Có Tiếp tục, Chơi lại Đêm, Cài đặt, Về menu. | Scenario CLI và trình duyệt |
+| Cài đặt | Có âm lượng và độ nhạy chuột. Giá trị vẫn giữ sau tải lại trang. | Trình duyệt |
+| Âm thanh | Nhạc nền, các hiệu ứng tương tác, thắng/thua, quái xuất hiện, đếm ngược và báo gió. | Trình duyệt và luồng sự kiện mô phỏng |
+| HUD | Lửa trên trái, đồng hồ giữa trên và nhấp nháy đỏ khi còn ≤ 30 s, đèn/điểm trên phải, 10 ô dưới giữa, hồi chiêu dưới phải, lời nhắc E và mũi tên khi đèn ngoài màn hình. | Trình duyệt ở 1280 × 720 |
+| Bảng màu và ánh sáng | Các thành phần dùng bảng màu ticket. Ánh sáng môi trường tính theo `0.15 + 0.55 × (đèn sáng / tổng đèn)`. | Giá trị vật liệu, CSS và snapshot headless |
+
+Giả định cho mốc gió đầu tiên: báo ở giây 28, thổi ở giây 30–35, rồi lặp mỗi 30 giây. Thử nghiệm dùng Chrome và Node.js trên Windows. Các lần chạy hiện có ghi bên dưới. Quota token và chi phí cho lần chỉnh sửa này không có số đo trong repo.
+
 Chi tiết lệnh, số liệu chạy và smoke test trình duyệt nằm trong [bằng chứng Phase 2](../proof/phase-2/README.md).

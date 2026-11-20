@@ -115,7 +115,10 @@ test("wind charm grants its duration and night-three wind is deterministic", () 
   assert.equal(game.charmTicks, 600);
   assert.equal(game.charms[0].available, false);
   assert.equal(game.events.some(e => e.name === "charm_picked"), true);
-  for (let i = 0; i < 120; i++) game.step();
+  while (game.simTick < 1680) game.step();
+  assert.equal(game.windWarning, true);
+  assert.equal(game.windActive, false);
+  while (game.simTick < 1800) game.step();
   assert.equal(game.windActive, true);
   assert.equal(game.snapshot().wind.active, true);
 });
@@ -128,14 +131,14 @@ test("a hit drops half the carried motes and grants 90 ticks of invulnerability"
   game.step();
   assert.equal(game.player.flames, 2);
   assert.equal(game.player.carried, 4);
-  assert.equal(game.invulnTicks, 91);
+  assert.equal(game.invulnTicks, 90);
   assert.equal(game.motes.filter(m => m.kind === "dropped").length, 4);
-  for (let i = 0; i < 90; i++) game.step();
+  for (let i = 0; i < 89; i++) game.step();
   assert.equal(game.invulnTicks, 1);
 });
 
 test("night-one shade schedule starts with two and respects the map limit", () => {
-  const game = createGame(7, emptyNight());
+  const game = createGame(7, emptyNight({ random_shades: true }));
   for (let i = 0; i < 300; i++) game.step();
   assert.equal(game.shades.length, 2);
   assert.ok(game.shades.every(shade => shade.state === "spawning"));
@@ -151,7 +154,7 @@ test("falling costs one flame and respawns at the island start", () => {
   for (let i = 0; i < 60; i++) game.step();
   assert.deepEqual(game.player.pos, [0, 0, 0]);
   assert.equal(game.player.grounded, true);
-  assert.equal(game.invulnTicks, 91);
+  assert.equal(game.invulnTicks, 90);
 });
 
 test("safe zones repel shades and a pulse makes a fleeing drifter drop stolen motes", () => {
@@ -167,7 +170,8 @@ test("safe zones repel shades and a pulse makes a fleeing drifter drop stolen mo
     drifters: [{ id: "D1", pos: [2, 0, 0], state: "flee", stolen: 4, state_ticks_left: 100 }]
   }), {}, 2);
   drifterGame.step({ pulse: true });
-  assert.equal(drifterGame.drifters[0].state, "removed");
+  assert.equal(drifterGame.drifters[0].state, "flee");
+  assert.ok(drifterGame.motes.every(mote => mote.pos.join() === "2,0,0"));
   assert.equal(drifterGame.motes.filter(mote => mote.kind === "dropped").length, 4);
   assert.ok(drifterGame.events.some(event => event.name === "drifter_drop"));
 });
@@ -176,7 +180,12 @@ test("night-two launch pads and night-three stepped floors use their intended he
   const islandGame = createGame(1, emptyNight({ player: { pos: [20, 0, 18] } }), {}, 2);
   islandGame.step();
   assert.equal(islandGame.player.launched, true);
-  assert.deepEqual(islandGame.player.launchVelocity, [24, 14, 0]);
+  const [vx, vy, vz] = islandGame.player.launchVelocity;
+  assert.equal(vy, 14);
+  assert.ok(Math.abs(Math.hypot(vx, vz) - 24) < 0.001);
+  assert.ok(Math.abs(vz / vx + 18 / 50) < 0.001);
+  for (let i = 0; i < 90 && islandGame.player.launched; i++) islandGame.step({ move: [-1, 0] });
+  assert.ok(Math.hypot(islandGame.player.pos[0] - 70, islandGame.player.pos[2]) < 28);
 
   const mountainGame = createGame(1, emptyNight(), {}, 3);
   assert.equal(mountainGame.floorAt(0, 0), 6);

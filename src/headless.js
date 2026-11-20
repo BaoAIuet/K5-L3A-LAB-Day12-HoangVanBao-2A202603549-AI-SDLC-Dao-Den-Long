@@ -41,7 +41,7 @@ const ticks = Number(args.ticks);
 const night = args.night == null ? 1 : Number(args.night);
 const snapshotEvery = args["snapshot-every"] == null ? 10 : Number(args["snapshot-every"]);
 if (!Number.isInteger(seed)) fail("--seed must be an integer");
-if (!Number.isInteger(ticks) || ticks < 0 || ticks > 21600) fail("--ticks must be an integer between 0 and 21600");
+if (!Number.isSafeInteger(ticks) || ticks < 0) fail("--ticks must be a non-negative integer");
 if (!Number.isInteger(night) || ![1, 2, 3].includes(night)) fail("--night must be 1, 2, or 3");
 if (!Number.isInteger(snapshotEvery) || snapshotEvery <= 0) fail("--snapshot-every must be a positive integer");
 
@@ -50,7 +50,7 @@ const scenario = args.scenario ? readJson(args.scenario, "scenario") : {};
 if (!scenario || typeof scenario !== "object" || Array.isArray(scenario)) fail("Scenario must be a JSON object");
 const inputDocument = args.inputs ? readJson(args.inputs, "inputs") : { frames: [] };
 if (!inputDocument || typeof inputDocument !== "object" || Array.isArray(inputDocument)) fail("Inputs must be a JSON object");
-const frames = inputDocument.frames ?? [];
+const frames = args.inputs ? inputDocument.frames : [];
 if (!Array.isArray(frames)) fail("inputs.frames must be an array");
 let lastTick = -1;
 for (const frame of frames) {
@@ -58,14 +58,51 @@ for (const frame of frames) {
     fail("Input frame ticks must be non-negative integers and increase strictly");
   }
   lastTick = frame.tick;
-  if (frame.move != null && (!Array.isArray(frame.move) || frame.move.length !== 2
+  if ("move" in frame && (!Array.isArray(frame.move) || frame.move.length !== 2
     || frame.move.some(n => typeof n !== "number" || n < -1 || n > 1))) {
     fail("Input move must be [x,z] with each component in [-1,1]");
   }
-  if (frame.cam_yaw_deg != null && typeof frame.cam_yaw_deg !== "number") fail("Input cam_yaw_deg must be a number");
+  if ("cam_yaw_deg" in frame && !Number.isFinite(frame.cam_yaw_deg)) fail("Input cam_yaw_deg must be a number");
   for (const key of ["jump", "dash", "interact", "pulse", "pause"]) {
-    if (frame[key] != null && typeof frame[key] !== "boolean") fail(`Input ${key} must be a boolean`);
+    if (key in frame && typeof frame[key] !== "boolean") fail(`Input ${key} must be a boolean`);
   }
+}
+
+const isObject = value => value !== null && typeof value === "object" && !Array.isArray(value);
+const isPosition = value => Array.isArray(value) && value.length === 3 && value.every(Number.isFinite);
+const isCount = value => Number.isSafeInteger(value) && value >= 0;
+const optional = (object, key, check) => !(key in object) || check(object[key]);
+const isId = value => typeof value === "string" && value.length > 0;
+const isBoolean = value => typeof value === "boolean";
+const enumValue = values => value => values.includes(value);
+const item = (value, checks) => isObject(value) && Object.entries(checks).every(([key, check]) => optional(value, key, check));
+const playerFields = {
+  pos: isPosition, vel: isPosition, grounded: isBoolean, facing: Number.isFinite, carried: isCount, flames: isCount,
+  invuln_ticks: isCount, dash_cd_ticks: isCount, pulse_cd_ticks: isCount, charm_ticks: isCount
+};
+const scenarioFields = {
+  player: value => item(value, playerFields),
+  time_left_s: value => Number.isFinite(value) && value >= 0,
+  random_motes: isBoolean, random_shades: isBoolean, random_drifters: isBoolean, wind_enabled: isBoolean,
+  lanterns: value => Array.isArray(value) && value.every(entry => item(entry, {
+    id: isId, pos: isPosition, lit: isBoolean, deposited: isCount
+  }) && isId(entry.id)),
+  motes: value => Array.isArray(value) && value.every(entry => isPosition(entry) || item(entry, {
+    id: isId, pos: isPosition, kind: enumValue(["random", "dropped"]), ttl_ticks: isCount,
+    ttl_s: value => value === null || (Number.isFinite(value) && value >= 0)
+  }) && isPosition(entry.pos)),
+  shades: value => Array.isArray(value) && value.every(entry => item(entry, {
+    id: isId, pos: isPosition, state_ticks_left: isCount, state: enumValue(["spawning", "wander", "chase", "recoil", "stunned"])
+  }) && isPosition(entry.pos)),
+  drifters: value => Array.isArray(value) && value.every(entry => item(entry, {
+    id: isId, pos: isPosition, state_ticks_left: isCount, stolen: isCount, state: enumValue(["idle", "chase", "flee", "removed"])
+  }) && isPosition(entry.pos)),
+  charms: value => Array.isArray(value) && value.every(entry => item(entry, {
+    id: isId, pos: isPosition, available: isBoolean, respawn_ticks: isCount
+  }) && isId(entry.id))
+};
+for (const [key, check] of Object.entries(scenarioFields)) {
+  if (!optional(scenario, key, check)) fail(`Invalid scenario field: ${key}`);
 }
 
 let game;

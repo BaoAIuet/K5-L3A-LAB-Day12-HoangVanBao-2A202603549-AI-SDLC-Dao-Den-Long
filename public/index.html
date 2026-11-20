@@ -8,25 +8,37 @@
 </head>
 <body>
   <div id="world" aria-label="Thế giới game Đảo Đèn Lồng"></div>
-  <section id="hud" hidden aria-live="polite">
-    <div class="hud-left"><strong id="night-title"></strong><div id="flames"></div></div>
-    <div id="clock">05:00</div>
-    <div class="hud-right"><span id="lantern-count">Đèn 0/5</span><strong id="score">0</strong></div>
+  <div id="vignette" aria-hidden="true"></div>
+  <section id="hud" hidden aria-label="Thông tin lượt chơi">
+    <div class="hud-left panel"><strong id="night-title"></strong><div id="flames" aria-label="Lửa còn lại"></div></div>
+    <div class="timer panel"><span class="hud-label">ĐẾN BÌNH MINH</span><strong id="clock">05:00</strong></div>
+    <div class="hud-right panel"><span class="hud-label">ĐÈN ĐÃ THẮP</span><strong id="lantern-count">0 / 5</strong>
+      <progress id="lantern-progress" max="1" value="0" aria-label="Tiến độ thắp đèn"></progress><span id="score">0 điểm</span></div>
     <div id="wind-label" hidden></div>
-    <div id="direction-arrow" hidden>➤</div>
-    <div id="mote-bar" aria-label="Đom đóm đang mang"></div>
-    <div id="ability-bar"><span id="dash-status">Lướt</span><span id="pulse-status">Tỏa sáng</span></div>
+    <div id="direction-arrow" hidden aria-hidden="true"></div>
+    <div class="kit panel">
+      <div class="kit-inventory">
+        <div class="kit-title"><span class="hud-label">ĐOM ĐÓM</span><strong id="mote-count">0 / 10</strong></div>
+        <div id="mote-bar" aria-hidden="true"></div>
+      </div>
+    </div>
+    <div id="ability-bar"><div><kbd>Shift</kbd><span id="dash-status">Lướt</span></div><div><kbd>F</kbd><span id="pulse-status">Tỏa sáng</span></div></div>
     <div id="prompt"></div>
-    <div id="toast" hidden></div>
+    <div id="toast" role="status" hidden></div>
   </section>
   <div id="menu-screen" class="screen">
     <div class="card">
       <p class="eyebrow">MỘT HÀNH TRÌNH QUA BA ĐÊM</p>
       <h1>Đảo Đèn Lồng</h1>
-      <p>Mây hãy gom đom đóm, thắp sáng những hòn đảo và đưa bình minh trở lại.</p>
-      <button id="begin">Bắt đầu</button>
-      <button id="open-settings" class="secondary">Cài đặt</button>
-      <p class="controls">WASD di chuyển · Space nhảy · Shift lướt · E nạp đèn · F tỏa sáng · Esc/P tạm dừng</p>
+      <p class="menu-story">Cùng Mây gom đom đóm, thắp sáng những hòn đảo và đưa bình minh trở lại.</p>
+      <div class="menu-actions"><button id="begin">Bắt đầu hành trình <span aria-hidden="true">→</span></button>
+      <button id="open-settings" class="secondary">Cài đặt</button></div>
+      <div class="controls" aria-label="Điều khiển">
+        <span><kbd>WASD</kbd> Di chuyển</span><span><kbd>Space</kbd> Nhảy</span>
+        <span><kbd>Shift</kbd> Lướt</span><span><kbd>E</kbd> Nạp đèn</span>
+        <span><kbd>F</kbd> Tỏa sáng</span><span><kbd>Esc</kbd> Tạm dừng</span>
+        <span>Kéo chuột để xoay góc nhìn</span>
+      </div>
     </div>
   </div>
   <div id="intro-screen" class="screen" hidden>

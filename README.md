@@ -1,7 +1,5 @@
 # Đảo Đèn Lồng
 
-[![Video demo](https://img.shields.io/badge/Video-Demo-orange)](docs/demo/demo.mp4)
-
 Game 3D góc nhìn thứ ba về Mây, người giữ đèn nhỏ tuổi thu thập đom đóm, thắp lại đèn và né Bóng Mực.
 
 ## Cài đặt và chạy
@@ -48,10 +46,10 @@ npm run headless -- --seed 42 --night 1 --ticks 360 --out docs/proof/phase-2/sam
 - `docs/notes/`: giả định, nhật ký AI, retro.
 - `docs/proof/`: bằng chứng kiểm chứng từng phase.
 
-## Phase 2
+## Phase 1 và Phase 2
 
-Đêm 1–3, lướt, nhảy, tạm dừng, Gió Lạc và Bùa Gió được mô phỏng theo Test Contract v1.1. Xem [spec Phase 2](docs/notes/phase-2-spec.md) và [bằng chứng](docs/proof/phase-2/README.md).
+Tag `phase-1` là bản một đêm với Test Contract v1.0. Tag `phase-2` là bản ba đêm với Test Contract v1.1. Xem [spec Phase 2](docs/notes/phase-2-spec.md) và [bằng chứng kiểm chứng](docs/proof/phase-2/README.md).
 
 ## Sáng tạo của tôi
 
-Thế giới 3D có ba bản đồ theo tiến trình, ánh sáng đảo thay đổi theo đèn được thắp và HUD chỉ dẫn tới đèn chưa sáng.
+Thế giới Three.js có mặt nước chuyển động, quầng sáng cho đom đóm và vòng sáng khi thắp đèn. Phần hiển thị đọc dữ liệu từ mô phỏng; các bài test xác nhận kết quả headless lặp lại với cùng seed và input.
