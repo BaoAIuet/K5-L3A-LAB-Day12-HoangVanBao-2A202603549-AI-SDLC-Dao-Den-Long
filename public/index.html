@@ -7,13 +7,49 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <canvas id="game" width="960" height="540"></canvas>
-  <div id="hud">
-    <div><strong>Đảo Đèn Lồng</strong></div>
-    <div id="status">Ánh sáng: 5 · Mang: 0 · Điểm: 0 · Thời gian: 300</div>
+  <div id="world" aria-label="Thế giới game Đảo Đèn Lồng"></div>
+  <section id="hud" hidden aria-live="polite">
+    <div class="hud-left"><strong id="night-title"></strong><div id="flames"></div></div>
+    <div id="clock">05:00</div>
+    <div class="hud-right"><span id="lantern-count">Đèn 0/5</span><strong id="score">0</strong></div>
+    <div id="wind-label" hidden></div>
+    <div id="direction-arrow" hidden>➤</div>
+    <div id="mote-bar" aria-label="Đom đóm đang mang"></div>
+    <div id="ability-bar"><span id="dash-status">Lướt</span><span id="pulse-status">Tỏa sáng</span></div>
+    <div id="prompt"></div>
+    <div id="toast" hidden></div>
+  </section>
+  <div id="menu-screen" class="screen">
+    <div class="card">
+      <p class="eyebrow">MỘT HÀNH TRÌNH QUA BA ĐÊM</p>
+      <h1>Đảo Đèn Lồng</h1>
+      <p>Mây hãy gom đom đóm, thắp sáng những hòn đảo và đưa bình minh trở lại.</p>
+      <button id="begin">Bắt đầu</button>
+      <button id="open-settings" class="secondary">Cài đặt</button>
+      <p class="controls">WASD di chuyển · Space nhảy · Shift lướt · E nạp đèn · F tỏa sáng · Esc/P tạm dừng</p>
+    </div>
   </div>
-  <div id="help">WASD/←→↑↓ di chuyển · Chuột trái: xoay phải · E nạp đèn · Space tỏa sáng · R chơi lại</div>
-  <div id="overlay" hidden><h1 id="result"></h1><button id="restart">Chơi lại</button></div>
+  <div id="intro-screen" class="screen" hidden>
+    <div class="card"><p class="eyebrow" id="intro-kicker"></p><h1 id="intro-title"></h1><p id="intro-story"></p><button id="play-night">Vào đêm</button></div>
+  </div>
+  <div id="pause-screen" class="screen" hidden>
+    <div class="card"><p class="eyebrow">ĐÊM TẠM DỪNG</p><h1>Thở một nhịp</h1>
+      <button id="resume">Tiếp tục</button><button id="replay" class="secondary">Chơi lại đêm</button>
+      <button id="pause-settings" class="secondary">Cài đặt</button><button id="to-menu" class="secondary">Về menu</button>
+    </div>
+  </div>
+  <div id="result-screen" class="screen" hidden>
+    <div class="card"><p class="eyebrow" id="result-kicker"></p><h1 id="result-title"></h1><p id="result-copy"></p>
+      <button id="result-action"></button><button id="result-menu" class="secondary">Về menu</button>
+    </div>
+  </div>
+  <div id="settings-screen" class="screen" hidden>
+    <div class="card"><p class="eyebrow">CÀI ĐẶT</p><h1>Âm thanh & điều khiển</h1>
+      <label>Âm lượng <input id="volume" type="range" min="0" max="1" step="0.05"></label>
+      <label>Độ nhạy chuột <input id="sensitivity" type="range" min="0.2" max="3" step="0.1"></label>
+      <button id="close-settings">Xong</button>
+    </div>
+  </div>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

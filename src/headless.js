@@ -1,75 +1,94 @@
 import fs from "node:fs";
 import { createGame } from "./game.js";
 
-function usageError(message) {
+function fail(message, code = 2) {
   console.error(message);
-  process.exit(2);
+  process.exit(code);
 }
 
 function parseArgs(argv) {
-  const args = {};
+  const parsed = {};
   for (let i = 0; i < argv.length; i++) {
-    if (!argv[i].startsWith("--")) continue;
-    const key = argv[i].slice(2);
+    const token = argv[i];
+    if (!token.startsWith("--")) fail(`Unexpected argument: ${token}`);
+    const key = token.slice(2);
+    if (key === "help") {
+      console.log("Usage: node src/headless.js --seed <int> --night <1|2|3> --ticks <int> --out <file> [--scenario <file>] [--inputs <file>] [--snapshot-every <int>]");
+      process.exit(0);
+    }
     const value = argv[i + 1];
-    if (value != null && !value.startsWith("--")) { args[key] = value; i++; }
-    else args[key] = true;
+    if (value == null || value.startsWith("--")) fail(`Missing value for --${key}`);
+    parsed[key] = value;
+    i++;
   }
-  return args;
+  return parsed;
+}
+
+function readJson(file, label) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (error) {
+    fail(`Invalid ${label}: ${error.message}`);
+  }
 }
 
 const args = parseArgs(process.argv.slice(2));
-if (!args.seed || !args.out || !args.ticks) usageError("Required: --seed <int> --ticks <int> --out <file>");
-
-let tuning = {};
-let scenario = {};
-try {
-  tuning = JSON.parse(fs.readFileSync(new URL("../game.contract.json", import.meta.url), "utf8")).tuning;
-} catch (error) {
-  console.error(error.message);
-  process.exit(1);
+if (args.seed == null || args.ticks == null || args.out == null) {
+  fail("Required: --seed <int> --ticks <int> --out <file>");
 }
-try {
-  if (args.scenario) scenario = JSON.parse(fs.readFileSync(args.scenario, "utf8"));
-  if (args.inputs) {
-    const parsed = JSON.parse(fs.readFileSync(args.inputs, "utf8"));
-    globalThis.inputsData = parsed.frames || [];
-  }
-} catch (error) {
-  usageError(`Invalid input or scenario: ${error.message}`);
-}
-
 const seed = Number(args.seed);
 const ticks = Number(args.ticks);
-if (!Number.isInteger(seed) || !Number.isInteger(ticks) || ticks < 0) usageError("Seed and ticks must be integers");
-
+const night = args.night == null ? 1 : Number(args.night);
 const snapshotEvery = args["snapshot-every"] == null ? 10 : Number(args["snapshot-every"]);
-if (!Number.isInteger(snapshotEvery) || snapshotEvery <= 0) usageError("snapshot-every must be a positive integer");
+if (!Number.isInteger(seed)) fail("--seed must be an integer");
+if (!Number.isInteger(ticks) || ticks < 0 || ticks > 21600) fail("--ticks must be an integer between 0 and 21600");
+if (!Number.isInteger(night) || ![1, 2, 3].includes(night)) fail("--night must be 1, 2, or 3");
+if (!Number.isInteger(snapshotEvery) || snapshotEvery <= 0) fail("--snapshot-every must be a positive integer");
 
-const game = createGame(seed, scenario, tuning);
-const lines = [game.snapshot()];
-const frames = globalThis.inputsData || [];
-let frameIndex = 0;
-let currentInput = { move: [0, 0], cam_yaw_deg: 0, jump: false, interact: false, pulse: false };
-
-for (let k = 0; k < ticks && game.state === "playing"; k++) {
-  while (frameIndex < frames.length && frames[frameIndex].tick <= k) {
-    const frame = frames[frameIndex++];
-    if (!Number.isInteger(frame.tick)) usageError("Input frame tick must be an integer");
-    if (frameIndex > 1 && frame.tick <= frames[frameIndex - 2].tick) usageError("Input frame ticks must increase strictly");
-    for (const key of ["move", "cam_yaw_deg", "jump", "interact", "pulse"]) {
-      if (Object.prototype.hasOwnProperty.call(frame, key)) currentInput[key] = frame[key];
-    }
+const contract = readJson(new URL("../game.contract.json", import.meta.url), "game.contract.json");
+const scenario = args.scenario ? readJson(args.scenario, "scenario") : {};
+if (!scenario || typeof scenario !== "object" || Array.isArray(scenario)) fail("Scenario must be a JSON object");
+const inputDocument = args.inputs ? readJson(args.inputs, "inputs") : { frames: [] };
+if (!inputDocument || typeof inputDocument !== "object" || Array.isArray(inputDocument)) fail("Inputs must be a JSON object");
+const frames = inputDocument.frames ?? [];
+if (!Array.isArray(frames)) fail("inputs.frames must be an array");
+let lastTick = -1;
+for (const frame of frames) {
+  if (!frame || !Number.isInteger(frame.tick) || frame.tick < 0 || frame.tick <= lastTick) {
+    fail("Input frame ticks must be non-negative integers and increase strictly");
   }
-  game.step(currentInput);
-  for (const event of game.events) lines.push(event);
-  if ((k + 1) % snapshotEvery === 0) lines.push(game.snapshot());
+  lastTick = frame.tick;
+  if (frame.move != null && (!Array.isArray(frame.move) || frame.move.length !== 2
+    || frame.move.some(n => typeof n !== "number" || n < -1 || n > 1))) {
+    fail("Input move must be [x,z] with each component in [-1,1]");
+  }
+  if (frame.cam_yaw_deg != null && typeof frame.cam_yaw_deg !== "number") fail("Input cam_yaw_deg must be a number");
+  for (const key of ["jump", "dash", "interact", "pulse", "pause"]) {
+    if (frame[key] != null && typeof frame[key] !== "boolean") fail(`Input ${key} must be a boolean`);
+  }
 }
 
-lines.push({ type: "end", ticks: game.tick, state: game.state, score: game.score });
+let game;
 try {
-  fs.writeFileSync(args.out, lines.map(x => JSON.stringify(x)).join("\n") + "\n");
+  game = createGame(seed, scenario, contract.tuning, night);
 } catch (error) {
-  console.error(error.message);
-  process.exit(1);
+  fail(`Invalid scenario: ${error.message}`);
+}
+const lines = [game.snapshot(), ...game.events];
+let frameIndex = 0;
+const currentInput = { move: [0, 0], cam_yaw_deg: 0, jump: false, dash: false, interact: false, pulse: false, pause: false };
+for (let frameTick = 0; frameTick < ticks && !game.finished; frameTick++) {
+  while (frameIndex < frames.length && frames[frameIndex].tick <= frameTick) {
+    Object.assign(currentInput, frames[frameIndex]);
+    frameIndex++;
+  }
+  game.step(currentInput);
+  lines.push(...game.events);
+  if (game.tick % snapshotEvery === 0) lines.push(game.snapshot());
+}
+lines.push({ type: "end", ticks: game.tick, sim_tick: game.simTick, state: game.state, score: game.score });
+try {
+  fs.writeFileSync(args.out, lines.map(line => JSON.stringify(line)).join("\n") + "\n");
+} catch (error) {
+  fail(`Cannot write output: ${error.message}`, 1);
 }

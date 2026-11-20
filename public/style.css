@@ -1,9 +1,37 @@
-:root { color-scheme: dark; }
+:root { color-scheme: dark; font-family: system-ui, "Segoe UI", sans-serif; color: #f5f1e6; }
 * { box-sizing: border-box; }
-body { margin: 0; overflow: hidden; background: #080714; color: #fff8dc; font-family: system-ui, sans-serif; }
-#game { display: block; width: 100vw; height: 100vh; }
-#hud { position: fixed; left: 20px; top: 18px; padding: 10px 14px; border-radius: 10px; background: rgba(10, 9, 28, .78); }
-#help { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); padding: 8px 12px; border-radius: 10px; background: rgba(10, 9, 28, .78); font-size: 14px; }
-#overlay { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; background: rgba(8, 7, 20, .72); }
-#overlay[hidden] { display: none; }
-#overlay button { padding: 10px 24px; border: 0; border-radius: 8px; background: #e6b84a; font-weight: 700; cursor: pointer; }
+body { margin: 0; overflow: hidden; background: #0e1430; }
+#world { position: fixed; inset: 0; }
+#world canvas { display: block; width: 100%; height: 100%; }
+[hidden] { display: none !important; }
+#hud { position: fixed; inset: 0; pointer-events: none; text-shadow: 0 2px 6px #080714; }
+.hud-left, .hud-right, #clock, #mote-bar, #ability-bar, #prompt, #toast { position: absolute; }
+.hud-left { left: 22px; top: 18px; }
+.hud-left strong { display: block; font-size: 15px; letter-spacing: .08em; }
+#flames { margin-top: 7px; color: #ff5a5f; font-size: 22px; letter-spacing: 3px; }
+#clock { top: 16px; left: 50%; transform: translateX(-50%); font-size: clamp(24px, 4vw, 36px); font-weight: 800; font-variant-numeric: tabular-nums; }
+#clock.urgent { color: #ff5a5f; animation: blink .7s steps(2, start) infinite; }
+.hud-right { right: 22px; top: 18px; display: grid; text-align: right; gap: 5px; }
+.hud-right strong { color: #f2c14e; font-size: 22px; }
+#mote-bar { left: 50%; bottom: 28px; transform: translateX(-50%); display: flex; gap: 5px; }
+.mote-cell { width: clamp(14px, 2vw, 22px); height: 12px; border: 1px solid #ffe58a; border-radius: 8px; background: #19213b; }
+.mote-cell.full { background: #ffe58a; box-shadow: 0 0 10px #ffe58a; }
+#ability-bar { right: 22px; bottom: 24px; display: flex; gap: 8px; }
+#ability-bar span { border: 1px solid #f2c14e; border-radius: 7px; background: #0e1430cc; padding: 6px 9px; font-size: 12px; }
+#ability-bar .cooling { opacity: .48; }
+#wind-label { position: absolute; top: 72px; left: 50%; transform: translateX(-50%); color: #8FA3B8; font-weight: 800; letter-spacing: .12em; }
+#direction-arrow { position: absolute; left: 50%; top: 50%; color: #F2C14E; font-size: 30px; text-shadow: 0 0 12px #f2c14e; transform-origin: center; }
+#prompt { left: 50%; bottom: 58px; transform: translateX(-50%); padding: 7px 12px; border-radius: 7px; background: #0e1430dd; }
+#toast { left: 50%; top: 21%; transform: translateX(-50%); color: #f2c14e; font-size: 20px; font-weight: 700; }
+.screen { position: fixed; inset: 0; display: grid; place-items: center; padding: 20px; background: linear-gradient(180deg, #0e1430a8, #0b1028e8); }
+.card { width: min(520px, 94vw); padding: clamp(24px, 5vw, 42px); border: 1px solid #f2c14e88; border-radius: 18px; background: #0e1430ef; box-shadow: 0 20px 70px #080714aa; text-align: center; }
+.card h1 { margin: 0 0 12px; color: #ffb347; font-size: clamp(32px, 7vw, 54px); }
+.card p { line-height: 1.65; color: #d6d5e0; }
+.card .eyebrow { color: #f2c14e; font-size: 12px; font-weight: 800; letter-spacing: .18em; }
+button { margin: 8px 4px; padding: 11px 22px; border: 0; border-radius: 8px; background: #f2c14e; color: #161328; font-weight: 800; cursor: pointer; }
+button:hover { filter: brightness(1.12); }
+button.secondary { border: 1px solid #f2c14e77; background: transparent; color: #f5f1e6; }
+.controls { font-size: 12px; }
+#settings-screen label { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin: 20px 0; }
+#settings-screen input { width: 50%; accent-color: #f2c14e; }
+@keyframes blink { to { visibility: hidden; } }
